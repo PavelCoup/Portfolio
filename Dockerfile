@@ -9,5 +9,5 @@ RUN cd /go \
 FROM alpine:latest
 COPY --from=wcg /go/word-cloud-generator/artifacts/linux/word-cloud-generator /
 RUN chmod +x /word-cloud-generator
-EXPOSE 80
+EXPOSE 8888
 ENTRYPOINT ["nohup", "/word-cloud-generator"]
