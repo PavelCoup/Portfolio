@@ -1,0 +1,101 @@
+pipeline {
+    agent any
+    environment {
+        gitUrl      = 'https://github.com/PavelCoup/IT_Bootcamp.git'
+        imageName   = 'it_bootcamp'
+        hubUsername = 'pavelcoup'
+        hubToken    = 'dckr_pat_6kHqegbiVZwbSQ25P3SQON9yGZ4'
+    }
+    stages {
+        stage('Clean workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: "${gitUrl}"]]])
+                // Клонирование репозитория
+            }
+        }
+        stage('Validate Dockerfile') {
+            steps {
+                sh 'docker run --rm -i hadolint/hadolint hadolint --ignore DL3003 --ignore DL3007 - < Dockerfile' // Валидация Dockerfile
+            }
+        }
+        stage('Build Docker image') {
+            steps {
+                sh "docker build -t ${imageName}:latest ." // Сборка образа
+            }
+        }
+        stage('Test Docker image') {
+            steps {
+                sh "docker run -d --name ${imageName} -p 80:8888 ${imageName}:latest" // Запуск контейнера
+                sh 'sleep 5' // Ожидание запуска контейнера
+                script {
+                    def response = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" http://localhost", returnStdout: true).trim()
+                    if (response != '200' || response != '301') {
+                        error("The page is not available. HTTP status code: ${response}")
+                    }
+                }    
+                // Проверка доступности веб-интерфейса приложения
+            }
+        }    
+        stage('Push Docker image') {
+            steps {
+                // withCredentials([usernamePassword(credentialsId: '<credentials-id>', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) { // Получение учетных данных для реестра образов
+                    sh "docker login -u ${hubUsername} -p ${hubToken}" // Авторизация в реестре образов
+                    sh "docker push ${imageName}:latest" // Загрузка образа в реестр
+                }
+        }
+        stage('Deploy to pre-production environment') {
+            steps {
+                script {
+                    def answer = input message: 'Deploy to pre-production?', parameters: [choice(choices: 'yes\nno', description: '', name: 'Answer')]
+                    if (answer == 'no') {
+                        error('Deployment was cancelled.')
+                    }
+                }
+                
+                
+                //input "Deploy to pre-production?" // Запрос на развертывание на предварительной среде
+                sh "kubectl apply deployment ${imageName} --image=${hubUsername}/${imageName}:latest --replicas=1 --namespace=pre-production"
+                //sh 'kubectl apply -f k8s/pre-production.yaml' // Развертывание на предварительной среде
+            }
+        }
+        stage('Test pre-production deployment') {
+            steps {
+                sh "kubectl rollout status deployment ${imageName} -n pre-production --timeout=30s"
+                input 'Deployment was successful. Deploy to production?'
+            }
+        }
+        stage('Deploy to production environment') {
+            steps {
+                sh "kubectl apply deployment ${imageName} --image=${hubUsername}/${imageName}:latest --replicas=1 --namespace=production"
+            }
+        }
+        stage('Clean up pre-production environment') {
+            steps {
+                input "Clean up pre-production?" // Запрос на очистку предварительной среды после развертывания на производственной среде
+                sh "kubectl delete deployment ${imageName} -n pre-production"
+                //sh 'kubectl delete -f k8s/pre-production.yaml' // Очистка предварительной среды после развертывания на производственной среде
+            }
+        }
+    }
+
+    post { 
+        always { 
+            sh "docker rm -f ${imageName}"
+        }
+        success {
+            mail to: 'team@example.com',
+                subject: "Build ${currentBuild.fullDisplayName} success",
+                body: "${env.BUILD_URL} has result success"
+        }
+        failure {
+            mail to: 'team@example.com',
+                subject: "Build ${currentBuild.fullDisplayName} fail",
+                body: "${env.BUILD_URL} has result fail"
+        }
+    }
+}
