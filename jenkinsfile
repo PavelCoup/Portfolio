@@ -7,6 +7,7 @@ pipeline {
         hubToken    = 'dckr_pat_6kHqegbiVZwbSQ25P3SQON9yGZ4'
         kubectl     = 'microk8s kubectl'
         emailTo     = 'test@test.com'
+        port        = '88'
     }
     stages {
         stage('Clean workspace') {
@@ -31,10 +32,10 @@ pipeline {
         }
         stage('Test Docker image') {
             steps {
-                sh "docker run -d --name ${imageName} -p 80:8888 ${imageName}:latest"
+                sh "docker run -d --name ${imageName} -p ${port}:8888 ${imageName}:latest"
                 sh 'sleep 5'
                 script {
-                    def response = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" http://localhost", returnStdout: true).trim()
+                    def response = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:${port}", returnStdout: true).trim()
                     if (response != '200') {
                         error("The page is not available. HTTP status code: ${response}.")
                     }
