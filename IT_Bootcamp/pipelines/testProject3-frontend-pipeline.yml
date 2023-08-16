@@ -1,0 +1,181 @@
+variables:
+  TARGET_REPOSITORY: itbc-devops-test
+  PROJECT_NAME: testProject3
+  IMAGE_NAME: ${PROJECT_NAME}-front-nginx
+  FINAL_IMAGE_NAME: $DOCKER_REGISTRY_SERVER/$TARGET_REPOSITORY/$IMAGE_NAME
+  TESTLAB_HOST: testlab.${PROJECT_NAME}.some.site
+  ENABLE_JOB: "false"
+
+default:
+  image: docker:latest
+  tags:
+    - ${PROJECT_NAME}
+    - dind
+
+before_script:
+  - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+  - docker login -u "$DOCKER_REGISTRY_USER" -p $(echo $DOCKER_REGISTRY_PASSWORD | base64 -d) "$DOCKER_REGISTRY_SERVER"
+
+stages:
+  - build_and_push
+  - deploy_to_dev
+  - deploy_to_qa
+  - deploy_to_preprod
+
+node_build:
+  stage: build_and_push
+  image: node:19-slim
+  cache:
+    key:
+      files:
+        - package.json
+    paths:
+      - node_modules/
+      - public/
+      - .npm/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$ENABLE_JOB == "true"'
+  before_script:
+    - |
+      if [[ -d node_modules ]]; then
+        echo "node_modules exist";
+      else
+        npm ci --cache .npm --prefer-offline --no-audit --no-optional;
+      fi
+  script:
+    - export CI=false
+    - npm run build
+    - ls -la
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
+docker_build_and_push:
+  stage: build_and_push
+  services:
+  - name: docker:dind
+    alias: thedockerhost
+    command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://thedockerhost:2375/
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_BUILDKIT: 1
+  dependencies:
+    - node_build
+  needs: 
+    - job: node_build
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+  retry:
+    max: 2
+  script:
+    - mkdir ./build_docker
+    - cp -r ./dist ./build_docker
+    - ls -la ./build_docker
+    - |
+      touch Dockerfile.inline && cat <<EOF >> Dockerfile.inline
+      FROM nginx:1.24.0-alpine
+      COPY build_docker/dist/ /usr/share/nginx/html
+      COPY .env /usr/share/nginx/html
+      COPY nginx.conf /etc/nginx/conf.d/default.conf
+      COPY ./env.sh /docker-entrypoint.d/env.sh
+      RUN chmod +x /docker-entrypoint.d/env.sh
+      EXPOSE 80
+      CMD ["nginx", "-g", "daemon off;"]
+      EOF
+    - >-
+      docker build 
+      --tag $FINAL_IMAGE_NAME:latest 
+      --tag $FINAL_IMAGE_NAME:$BUILD_NUMBER 
+      -f ./Dockerfile.inline 
+      $CI_PROJECT_DIR
+    - docker image ls | grep $FINAL_IMAGE_NAME
+    - docker push $FINAL_IMAGE_NAME:latest
+    - docker push $FINAL_IMAGE_NAME:$BUILD_NUMBER
+
+.deploy_script: &deploy_script
+  - apk add sshpass
+  - alias myssh='sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$TESTLAB_HOST'
+  - myssh "docker ps -a | grep $CONTAINER_NAME | awk '{print $1}' | xargs docker rm -f 2>/dev/null || true"
+  - myssh "docker image ls | grep $IMAGE_NAME | grep -P $LABLE_MASK | awk '{print $3}' | xargs docker rmi -f 2>/dev/null || true"
+  - myssh "docker login -u $DOCKER_REGISTRY_USER -p $(echo $DOCKER_REGISTRY_PASSWORD | base64 -d) $DOCKER_REGISTRY_SERVER"
+  - myssh "docker pull $FINAL_IMAGE_NAME:$BUILD_NUMBER"
+  - >-
+    myssh "docker run -d
+    --restart always 
+    --network net_${PROJECT_NAME} 
+    -e API_URL=$URL_API 
+    -p $PORTS 
+    --name $CONTAINER_NAME 
+    $FINAL_IMAGE_NAME:$BUILD_NUMBER"
+
+deploy_to_dev:
+  stage: deploy_to_dev
+  variables:
+    CONTAINER_NAME: dev-${PROJECT_NAME}-frontend
+    URL_API: http://dev.${PROJECT_NAME}.some.site
+    PORTS: "81:80"
+    LABLE_MASK: latest
+  needs: 
+    - job: docker_build_and_push
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+      when: on_success  
+  before_script:
+    - export BUILD_NUMBER=latest
+  script:
+    - *deploy_script
+
+deploy_to_qa:
+  stage: deploy_to_qa
+  variables:
+    CONTAINER_NAME: qa-${PROJECT_NAME}-frontend
+    URL_API: http://qa.${PROJECT_NAME}.some.site
+    PORTS: "82:80"
+    LABLE_MASK: '[0-9]{6}\.[0-9a-z]{8}'
+  needs: 
+    - job: deploy_to_dev
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+    - if: '$ENABLE_JOB == "true"'
+      when: manual
+  allow_failure: true
+  before_script:
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+  script:
+    - *deploy_script
+
+deploy_to_preprod:
+  stage: deploy_to_preprod
+  needs: 
+    - job: deploy_to_qa
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+    - if: '$ENABLE_JOB == "true"'
+      when: manual
+  allow_failure: true
+  before_script:
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+  script:
+    - apk add sshpass
+    - alias myssh='sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$KUBE_HOST'
+    - myssh "helm get values pa-preprod > testProject3-preprod-frontend-values.yaml"
+    - >-
+      myssh "helm upgrade testProject3-preprod 
+      /kube/project-bootcamp-chart 
+      -f testProject3-preprod-frontend-values.yaml 
+      --set deployments.frontend.version=$BUILD_NUMBER
+      --set deployments.frontend.env.API_URL='http://preprod.testProject3.some.site'"

@@ -1,0 +1,267 @@
+variables:
+  TARGET_REPOSITORY: itbc-devops-test
+  PROJECT_NAME: testProject1
+  IMAGE_NAME: ${PROJECT_NAME}-backend
+  FINAL_IMAGE_NAME: $DOCKER_REGISTRY_SERVER/$TARGET_REPOSITORY/$IMAGE_NAME
+  TESTLAB_HOST: testlab.${PROJECT_NAME}.some.site
+  REPO: bootcamp/iteen1/personal_account_backend
+  POSTGRES_DB: dev
+  POSTGRES_USER: $PRIMARY_DATABASE_USER
+  POSTGRES_PASSWORD: $PRIMARY_DATABASE_PASSWORD
+  POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+  DEBUG: "True"
+  IMAGES_PATH: /app/.artifacts/media/children_profile_images
+  ENABLE_JOB: "false"
+
+default:
+  image: docker:latest
+  tags:
+    - ${PROJECT_NAME}
+    - dind
+  cache: &global_cache
+    key: 
+      files:
+        - Dockerfile
+        - pyproject.toml
+    paths:
+      - .ci/  
+  before_script:  
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+    - docker login -u "$DOCKER_REGISTRY_USER" -p $(echo $DOCKER_REGISTRY_PASSWORD | base64 -d) "$DOCKER_REGISTRY_SERVER"
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+ 
+stages:
+  - build_and_tests
+  - build_and_push
+  - deploy_to_dev
+  - deploy_to_qa
+  - deploy_to_preprod
+
+build_and_tests:
+  stage: build_and_tests
+  services:
+  - name: docker:dind
+    alias: thedockerhost
+    command: ["--tls=false"]
+  - name: postgres:15.2
+    alias: db
+  - name: mcr.microsoft.com/mssql/server:2017-latest
+    alias: mssql
+  variables:
+    DOCKER_HOST: tcp://thedockerhost:2375/
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_BUILDKIT: 1
+    FF_NETWORK_PER_BUILD: 1
+    ACCEPT_EULA: "Y"
+    MSSQL_SA_PASSWORD: $MSSQL_DATABASE_PASSWORD
+  cache:
+    <<: *global_cache
+  rules:
+    - if: '$ENABLE_JOB == "true"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - echo "waiting for the MSSQL base"
+    - |+
+      docker run --rm --network=host tsgkadot/mssql-tools sqlcmd -S mssql -U sa -P $MSSQL_DATABASE_PASSWORD -Q 'CREATE DATABASE testdatabase;'
+      if ! docker run --rm --network=host tsgkadot/mssql-tools sqlcmd -S mssql -U sa -P $MSSQL_DATABASE_PASSWORD -Q 'SELECT Name from sys.databases;' | grep -q 'testdatabase'; then
+        echo "testdatabase not found"
+        exit 1
+      fi
+    - echo "mssql has started"
+    - echo "Build"
+    - >-
+      if [ ! -d $CI_PROJECT_DIR/.ci ]; then
+        mkdir $CI_PROJECT_DIR/.ci;
+        chmod a+rw $CI_PROJECT_DIR/.ci;
+      fi
+    - echo -e "\n.ci/" >> $CI_PROJECT_DIR/.dockerignore
+    - cat $CI_PROJECT_DIR/.dockerignore
+    - >-
+      if [ -f $CI_PROJECT_DIR/.ci/${IMAGE_NAME}-build.tar ]; then 
+        docker load -i $CI_PROJECT_DIR/.ci/${IMAGE_NAME}-build.tar;
+      fi
+    - >-
+      docker build
+      --cache-from ${IMAGE_NAME}:build
+      --build-arg BUILDKIT_INLINE_CACHE=1
+      --tag ${IMAGE_NAME}:build-local
+      $CI_PROJECT_DIR
+    - docker rmi -f ${IMAGE_NAME}:build
+    - docker image tag ${IMAGE_NAME}:build-local ${IMAGE_NAME}:build
+    - docker image ls
+    - echo "Run Container app"
+    - >-
+      docker run -d --rm
+      --name $IMAGE_NAME
+      -e PRIMARY_DATABASE_URL=postgres://$PRIMARY_DATABASE_USER:$PRIMARY_DATABASE_PASSWORD@db:5432/$POSTGRES_DB
+      -e ALLOWED_HOSTS=$ALLOWED_HOSTS
+      -e SECRET_KEY=$SECRET_KEY
+      -e MSSQL_DATABASE_HOST=mssql
+      -e MSSQL_DATABASE_NAME=testdatabase
+      -e MSSQL_DATABASE_PASSWORD=$MSSQL_DATABASE_PASSWORD
+      -e MSSQL_DATABASE_PORT=$MSSQL_DATABASE_PORT
+      -e MSSQL_DATABASE_USERNAME=sa
+      -e DJANGO_SUPERUSER_USERNAME=$DJANGO_SUPERUSER_USERNAME
+      -e DJANGO_SUPERUSER_PASSWORD=$DJANGO_SUPERUSER_PASSWORD
+      -e DJANGO_SUPERUSER_EMAIL=$DJANGO_SUPERUSER_EMAIL
+      -e DEBUG=$DEBUG
+      -e IMAGES_PATH=$IMAGES_PATH
+      --network=host
+      ${IMAGE_NAME}:build
+    - echo "Launch tests"
+    - docker exec $IMAGE_NAME bash tests.sh
+    - >-
+      if [ ! -f $CI_PROJECT_DIR/.ci/${IMAGE_NAME}-build.tar ]; then
+        docker save ${IMAGE_NAME}:build > $CI_PROJECT_DIR/.ci/${IMAGE_NAME}-build.tar;
+      fi
+    - du -sh .ci/*
+
+build_and_push:
+  stage: build_and_push
+  services:
+  - name: docker:dind
+    alias: thedockerhost
+    command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://thedockerhost:2375/
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_BUILDKIT: 1
+  cache:
+    <<: *global_cache
+    policy: pull
+  needs: 
+    - job: build_and_tests
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+  retry:
+    max: 2
+  script:
+    - echo "Building the application"
+    - >-
+      if [ -f $CI_PROJECT_DIR/.ci/${IMAGE_NAME}-build.tar ]; then 
+        docker load -i $CI_PROJECT_DIR/.ci/${IMAGE_NAME}-build.tar;
+      fi
+    - echo -e "\n.ci/" >> $CI_PROJECT_DIR/.dockerignore
+    - >-
+      docker build
+      --cache-from ${IMAGE_NAME}:build
+      --build-arg BUILDKIT_INLINE_CACHE=1
+      --tag $CI_REGISTRY/$REPO/$IMAGE_NAME:latest
+      --tag $FINAL_IMAGE_NAME:latest
+      --tag $FINAL_IMAGE_NAME:$BUILD_NUMBER
+      $CI_PROJECT_DIR
+    - docker image ls
+    - echo "Push the application"
+    - docker push $CI_REGISTRY/$REPO/$IMAGE_NAME:latest
+    - docker push $FINAL_IMAGE_NAME:latest
+    - docker push $FINAL_IMAGE_NAME:$BUILD_NUMBER
+
+.deploy_script: &deploy_script
+  - apk add sshpass
+  - alias myssh='sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$TESTLAB_HOST'
+  - myssh "docker ps -a | grep $CONTAINER_NAME | awk '{print $1}' | xargs docker rm -f 2>/dev/null || true"
+  - myssh "docker image ls | grep $IMAGE_NAME | grep -P $LABLE_MASK | awk '{print $3}' | xargs docker rmi -f 2>/dev/null || true"
+  - myssh "docker login -u $DOCKER_REGISTRY_USER -p $(echo $DOCKER_REGISTRY_PASSWORD | base64 -d) $DOCKER_REGISTRY_SERVER"
+  - myssh "docker pull $FINAL_IMAGE_NAME:$BUILD_NUMBER"
+  - >-
+    myssh "docker run -d
+    --restart always
+    --network net_${PROJECT_NAME}
+    -e PRIMARY_DATABASE_URL=$PRIMARY_DATABASE_URL
+    -e ALLOWED_HOSTS=$ALLOWED_HOSTS
+    -e SECRET_KEY=$SECRET_KEY
+    -e MSSQL_DATABASE_HOST=$MSSQL_DATABASE_HOST
+    -e MSSQL_DATABASE_NAME=$MSSQL_DATABASE_NAME
+    -e MSSQL_DATABASE_PASSWORD=$MSSQL_DATABASE_PASSWORD
+    -e MSSQL_DATABASE_PORT=$MSSQL_DATABASE_PORT
+    -e MSSQL_DATABASE_USERNAME=$MSSQL_DATABASE_USERNAME
+    -e DJANGO_SUPERUSER_USERNAME=$DJANGO_SUPERUSER_USERNAME
+    -e DJANGO_SUPERUSER_PASSWORD=$DJANGO_SUPERUSER_PASSWORD
+    -e DJANGO_SUPERUSER_EMAIL=$DJANGO_SUPERUSER_EMAIL
+    -e DEBUG=$DEBUG
+    -e BACK_VERSION=$VERSION
+    -e IMAGES_PATH=$IMAGES_PATH
+    -v $IMAGE_VOLUME:$IMAGES_PATH
+    -p ${PORTS}
+    --name $CONTAINER_NAME
+    $FINAL_IMAGE_NAME:$BUILD_NUMBER"
+
+deploy_to_dev:
+  stage: deploy_to_dev
+  variables:
+    CONTAINER_NAME: dev-${PROJECT_NAME}-backend
+    PRIMARY_DATABASE_URL: "postgres://$PRIMARY_DATABASE_USER:$PRIMARY_DATABASE_PASSWORD@db-dev-${PROJECT_NAME}:5432/$POSTGRES_DB"
+    ALLOWED_HOSTS: "*"
+    LABLE_MASK: latest
+    PORTS: "8001:8000"
+    IMAGE_VOLUME: volume_id_dev_${PROJECT_NAME}
+  needs: 
+    - job: build_and_push
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+      when: on_success
+  before_script:
+    - export BUILD_NUMBER=latest
+    - export VERSION=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+  script:
+    - *deploy_script
+ 
+deploy_to_qa:
+  stage: deploy_to_qa
+  variables:
+    CONTAINER_NAME: qa-${PROJECT_NAME}-backend
+    PRIMARY_DATABASE_URL: "postgres://$PRIMARY_DATABASE_USER:$PRIMARY_DATABASE_PASSWORD@db-qa-${PROJECT_NAME}:5432/$POSTGRES_DB"
+    ALLOWED_HOSTS: "*"
+    LABLE_MASK: '[0-9]{6}\.[0-9a-z]{8}'
+    PORTS: "8002:8000"
+    IMAGE_VOLUME: volume_id_qa_${PROJECT_NAME}
+  needs: 
+    - job: deploy_to_dev
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+    - if: '$ENABLE_JOB == "true"'
+      when: manual
+  allow_failure: true
+  before_script:
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+    - export VERSION=$BUILD_NUMBER
+    - export MSSQL_DATABASE_NAME=test-testProject1-qa
+  script:
+    - *deploy_script
+
+deploy_to_preprod:
+  stage: deploy_to_preprod
+  needs: 
+    - job: deploy_to_qa
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+    - if: '$ENABLE_JOB == "true"'
+      when: manual
+  allow_failure: true
+  before_script:
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+    - export VERSION=$BUILD_NUMBER
+  script:
+    - apk add sshpass
+    - alias myssh='sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$KUBE_HOST'
+    - myssh "helm get values testProject1-preprod > testProject1-preprod-backend-values.yaml"
+    - >-
+      myssh "helm upgrade testProject1-preprod 
+      /kube/project-bootcamp-chart 
+      -f testProject1-preprod-backend-values.yaml 
+      --set deployments.backend.version=$BUILD_NUMBER
+      --set deployments.backend.env.BACK_VERSION=$BUILD_NUMBER"

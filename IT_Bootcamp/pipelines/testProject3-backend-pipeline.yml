@@ -1,0 +1,274 @@
+variables:
+    TARGET_REPOSITORY: itbc-devops-test
+    PROJECT_NAME: testProject3
+    IMAGE_NAME: ${PROJECT_NAME}-backend
+    FINAL_IMAGE_NAME: $DOCKER_REGISTRY_SERVER/$TARGET_REPOSITORY/$IMAGE_NAME
+    TESTLAB_HOST: testlab.${PROJECT_NAME}.some.site
+    REPO: bootcamp/dev
+    ENABLE_JOB: "false"
+  
+default:
+  image: docker:latest
+  tags:
+    - ${PROJECT_NAME}
+    - dind    
+  
+before_script:  
+  - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+  
+stages:
+  - tests_or_check
+  - build_and_package
+  - deploy_to_dev
+  - deploy_to_qa
+  - deploy_to_preprod
+
+unit_tests_maven:
+  stage: tests_or_check
+  image: maven:3.8.6-amazoncorretto-17
+  cache:
+    key:
+      files:
+        - pom.xml
+    paths:
+      - .m2/
+  tags:
+    - sock  
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  rules:
+    - if: '$ENABLE_JOB == "true"'
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - mvn test
+    - du -sh ./.m2
+    - ls -la ./.m2/repository
+
+unit_integration_tests_sonar_check:
+  stage: tests_or_check
+  image: maven:3.8.6-amazoncorretto-17
+  tags:
+    - sock  
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+    SONAR_HOST_URL: "${SONAR_HOST_URL}"
+    SONAR_SCANNER_OPTS: "-Dsonar.projectKey=${SONAR_PROJECT}"
+    MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  cache:
+    - key: "${CI_JOB_NAME}"
+      paths:
+        - .sonar/cache
+    - key:
+        files:
+          - pom.xml
+      paths:
+        - .m2/
+  rules:
+    - if: '$ENABLE_JOB == "true"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME != "develop" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME != "main"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "develop" && $CI_COMMIT_BRANCH != "main"'
+      when: never  
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - yum install -y curl jq
+    - >-
+      curl -s -X POST -u ${SONAR_PROJECT}:${SONAR_PROJECT_PASSWORD}
+      -F "name=${SONAR_PROJECT}"
+      ${SONAR_HOST_URL}/api/user_tokens/revoke
+    - >-
+      export SONAR_TOKEN=$(curl -s -X POST -u ${SONAR_PROJECT}:${SONAR_PROJECT_PASSWORD}
+      -F "name=${SONAR_PROJECT}"
+      -F "projectKey=${SONAR_PROJECT}"
+      -F "type=PROJECT_ANALYSIS_TOKEN"
+      -F "login=${SONAR_PROJECT}"
+      ${SONAR_HOST_URL}/api/user_tokens/generate | jq -r '.token')
+    - >-
+      mvn clean verify -Pcoverage sonar:sonar 
+      -Dsonar.qualitygate.wait=true
+      -Dsonar.token=${SONAR_TOKEN}
+      -Dsonar.projectKey=${SONAR_PROJECT}
+      -Dsonar.host.url=${SONAR_HOST_URL}
+
+build_maven:
+  stage: build_and_package
+  image: maven:3.8.6-amazoncorretto-17
+  cache:
+    key:
+      files:
+        - pom.xml
+    paths:
+      - .m2/
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  needs: 
+    - job: unit_integration_tests_sonar_check
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+  script:
+    - mvn dependency:go-offline
+    - mvn package -DskipTests
+    - du -sh ./target
+    - ls -la ./target
+  artifacts:
+    paths:
+      - target/
+    expire_in: 1 week
+
+docker_build_and_push:
+  stage: build_and_package
+  services:
+  - name: docker:dind
+    alias: thedockerhost
+    command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://thedockerhost:2375/
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_BUILDKIT: 1
+  dependencies:
+    - build_maven
+  needs: 
+    - job: build_maven
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+  retry:
+    max: 2
+  script:
+    - docker login -u "$DOCKER_REGISTRY_USER" -p $(echo $DOCKER_REGISTRY_PASSWORD | base64 -d) "$DOCKER_REGISTRY_SERVER"
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - mkdir ./build_docker
+    - cp -r ./target ./build_docker
+    - ls -la ./build_docker/target
+    - echo "docker login"
+    - |
+      touch Dockerfile.inline && cat <<EOF >> Dockerfile.inline
+      FROM openjdk:17-alpine
+      RUN mkdir -p /opt/testProject3/photo
+      COPY build_docker/target/*.jar /opt/testProject3/app.jar
+      ENTRYPOINT ["java", "-jar", "/opt/testProject3/app.jar"]
+      EOF
+    - >-
+      docker build
+      --tag $CI_REGISTRY/$REPO/$IMAGE_NAME:latest
+      --tag $FINAL_IMAGE_NAME:latest
+      --tag $FINAL_IMAGE_NAME:$BUILD_NUMBER
+      -f ./Dockerfile.inline
+      $CI_PROJECT_DIR
+    - docker image ls | grep $FINAL_IMAGE_NAME
+    - docker push $CI_REGISTRY/$REPO/$IMAGE_NAME:latest
+    - docker push $FINAL_IMAGE_NAME:latest
+    - docker push $FINAL_IMAGE_NAME:$BUILD_NUMBER
+  
+.deploy_script: &deploy_script
+  - apk add sshpass
+  - alias myssh='sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$TESTLAB_HOST'
+  - myssh "docker ps -a | grep $CONTAINER_NAME | awk '{print $1}' | xargs docker rm -f 2>/dev/null || true"
+  - myssh "docker image ls | grep $IMAGE_NAME | grep -P $LABLE_MASK | awk '{print $3}' | xargs docker rmi -f 2>/dev/null || true"
+  - myssh "docker login -u $DOCKER_REGISTRY_USER -p $(echo $DOCKER_REGISTRY_PASSWORD | base64 -d) $DOCKER_REGISTRY_SERVER"
+  - myssh "docker pull $FINAL_IMAGE_NAME:$BUILD_NUMBER"
+  - >-
+    myssh "docker run -d
+    --restart always
+    --network net_${PROJECT_NAME}
+    -e CORS_ALLOWED_ORIGINS="*"
+    -e CORS_ALLOWED_METHODS="*"
+    -e DATABASE_URL=$URL_DATABASE
+    -e DATABASE_USERNAME=$DATABASE_USERNAME
+    -e DATABASE_PASSWORD=$DATABASE_PASSWORD
+    -e SPRING_PROFILES_ACTIVE=$SPRING_PROFILES_ACTIVE
+    -e JWT_SECRET_PHRASE='profile'
+    -p $PORTS
+    -e IMAGES_STORAGE_FOLDER='/opt/${PROJECT_NAME}/photo'
+    -v $IMAGE_VOLUME:/opt/${PROJECT_NAME}/photo
+    --log-driver=loki --log-opt loki-url="http://loki.some.site:3100/loki/api/v1/push"
+    --name $CONTAINER_NAME
+    $FINAL_IMAGE_NAME:$BUILD_NUMBER"
+
+deploy_to_dev:
+  stage: deploy_to_dev
+  variables:
+    CONTAINER_NAME: dev-${PROJECT_NAME}-backend
+    URL_DATABASE: "jdbc:mysql://db-dev-${PROJECT_NAME}:3306/dev"
+    LABLE_MASK: latest
+    PORTS: "8081:8080"
+    IMAGE_VOLUME: volume_id_dev_${PROJECT_NAME}
+    DATABASE_USERNAME: $testProject3_db_user_dev
+    DATABASE_PASSWORD: $testProject3_db_pass_dev
+    SPRING_PROFILES_ACTIVE: 'dev'
+  needs: 
+    - job: docker_build_and_push
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    - if: '$ENABLE_JOB == "true"'
+      when: on_success   
+  before_script:
+    - export BUILD_NUMBER=latest
+  script:
+    - *deploy_script
+  
+deploy_to_qa:
+  stage: deploy_to_qa
+  variables:
+    CONTAINER_NAME: qa-${PROJECT_NAME}-backend
+    URL_DATABASE: "jdbc:mysql://db-qa-${PROJECT_NAME}:3306/dev"
+    LABLE_MASK: '[0-9]{6}\.[0-9a-z]{8}'
+    PORTS: "8082:8080"
+    IMAGE_VOLUME: volume_id_qa_${PROJECT_NAME}
+    DATABASE_USERNAME: $testProject3_db_user_qa
+    DATABASE_PASSWORD: $testProject3_db_pass_qa
+    SPRING_PROFILES_ACTIVE: 'qa'
+  needs: 
+    - job: deploy_to_dev
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+    - if: '$ENABLE_JOB == "true"'
+      when: manual
+  allow_failure: true
+  before_script:
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+  script:
+    - *deploy_script
+
+deploy_to_preprod:
+  stage: deploy_to_preprod
+  needs: 
+    - job: deploy_to_qa
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+    - if: '$ENABLE_JOB == "true"'
+      when: manual
+  allow_failure: true
+  before_script:
+    - export BUILD_NUMBER=$(echo "$CI_COMMIT_TIMESTAMP" | cut -c 3-10 | sed 's/-//g').$CI_COMMIT_SHORT_SHA
+    - export VERSION=$BUILD_NUMBER
+  script:
+    - apk add sshpass
+    - alias myssh='sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$KUBE_HOST'
+    - myssh "helm get values pa-preprod > testProject3-preprod-backend-values.yaml"
+    - >-
+      myssh "helm upgrade testProject3-preprod 
+      /kube/project-bootcamp-chart 
+      -f testProject3-preprod-backend-values.yaml 
+      --set deployments.backend.version=$BUILD_NUMBER
+      --set deployments.backend.SPRING_PROFILES_ACTIVE=preprod"
