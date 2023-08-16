@@ -1,0 +1,24 @@
+---
+gitlab_url: "https://url.com/"
+runner_token: "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
+gitlab_runners:
+  - runner_name: gitlab_runner_testProject3_1
+    project: testProject3
+    executor: docker
+    type: dind
+  - runner_name: gitlab_runner_testProject3_2
+    project: testProject3
+    executor: docker
+    type: sock
+  - runner_name: gitlab_runner_testProject1_1
+    project: testProject1
+    executor: docker
+    type: dind
+  - runner_name: gitlab_runner_testProject2_1
+    project: testProject2
+    executor: docker
+    type: dind
+  - runner_name: gitlab_runner_testProject2_2
+    project: testProject2
+    executor: docker
+    type: dind

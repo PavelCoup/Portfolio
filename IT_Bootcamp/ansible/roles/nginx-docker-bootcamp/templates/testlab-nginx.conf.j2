@@ -1,0 +1,106 @@
+#jinja2: trim_blocks: "true", lstrip_blocks: "false"
+
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+stream {
+    upstream stream_qa {
+        server db-qa-{{ project_name }}:{{nginx_environments[0].db_port}} max_fails=2 fail_timeout=30s;
+    }
+
+    server {
+        listen {{nginx_environments[0].db_port}};
+        proxy_connect_timeout 1s;
+        proxy_timeout 3s;
+        proxy_pass stream_qa;
+    }
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    proxy_max_temp_file_size 0;
+
+    map $host $frontend {
+        {% for item in nginx_environments %}
+        "{{item.environment}}.{{ project_name }}.{{ dnsprefix }}" "{{item.environment}}-{{ project_name }}-frontend";
+        {% endfor %}
+        "127.0.0.1" "{{nginx_environments[0].environment}}-{{ project_name }}-frontend";
+        "localhost" "{{nginx_environments[0].environment}}-{{ project_name }}-frontend";
+    }
+
+    map $host $backend {
+        {% for item in nginx_environments %}
+        "{{item.environment}}.{{ project_name }}.{{ dnsprefix }}" "{{item.environment}}-{{ project_name }}-backend";
+        {% endfor %}
+        "127.0.0.1" "{{nginx_environments[0].environment}}-{{ project_name }}-backend";
+        "localhost" "{{nginx_environments[0].environment}}-{{ project_name }}-backend";
+    }
+
+    map $host $backend_port {
+        {% for item in nginx_environments %}
+        "{{item.environment}}.{{ project_name }}.{{ dnsprefix }}" "{{item.backend_port}}";
+        {% endfor %}
+        "127.0.0.1" "{{nginx_environments[0].backend_port}}";
+        "localhost" "{{nginx_environments[0].backend_port}}";
+    }
+
+    server {
+        listen 80;
+        server_name {% for item in nginx_environments %}{{ item.environment }}.{{ project_name }}.{{ dnsprefix }}{% if not loop.last %} {% endif %}{% endfor %} 127.0.0.1 localhost;
+
+        location / {
+            resolver 127.0.0.11;
+            proxy_pass http://${frontend}:80;
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+
+        location /api {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            client_max_body_size 5M;
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+        {{ ngins_custom_locations | indent(4, False) }}
+    }
+
+    server {
+        listen 80 default_server;
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+            try_files $uri $uri/ /index.html;
+            expires -1;
+        }
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}

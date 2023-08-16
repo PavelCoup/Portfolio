@@ -1,0 +1,9 @@
+---
+metallb_version: v0.13.10
+main_server: 192.168.1.5
+longhorn_url: longhorn.some.site
+kubernetes_pod_network:
+  cni: 'calico'
+  cidr: '192.168.2.0/16'
+worker_nodes:
+  - worker1.some.site

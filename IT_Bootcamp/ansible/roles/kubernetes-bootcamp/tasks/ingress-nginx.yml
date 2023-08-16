@@ -1,0 +1,15 @@
+---
+- name: Check if metallb namespace already exists
+  shell: kubectl get namespace | grep -c ingress-nginx || true
+  register: ingress_nginx_namespace_check
+
+- name: install ingress-nginx
+  shell: >-
+    helm install ingress-nginx ingress-nginx
+    --repo https://kubernetes.github.io/ingress-nginx
+    --namespace ingress-nginx --create-namespace
+  when: ingress_nginx_namespace_check.stdout == 0
+
+- name: delete ValidatingWebhookConfiguration
+  shell: kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission
+  when: ingress_nginx_namespace_check.stdout == 0

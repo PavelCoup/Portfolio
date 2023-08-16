@@ -1,0 +1,19 @@
+--- 
+- name: Deploy cAdvisor 
+  docker_container:
+    name: cadvisor
+    restart_policy: always
+    image: gcr.io/cadvisor/cadvisor:{{ cadvisor_version }}
+    command: --storage_duration={{ storage_duration }}
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    published_ports: "9101:8080"
+    state: started
+    restart: yes
+    networks: 
+      - name: "{{ docker_network_name }}"
+      - name: "bridge"

@@ -1,0 +1,19 @@
+#jinja2: trim_blocks: "true", lstrip_blocks: "false"
+.:53 {
+    rewrite stop type AAAA A
+    forward . 8.8.8.8 1.1.1.1
+    log
+    errors
+}
+
+{{ dnsprefix }}:53 {
+    rewrite stop type AAAA A
+    hosts {
+        {% for host in dns_list %}
+        {{ host }}
+        {% endfor %}
+        fallthrough
+    }
+    log
+    errors
+}

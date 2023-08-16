@@ -1,0 +1,88 @@
+namespaceSuffix: preprod
+project: testProject2
+dnsprefix: bootcamp.lan
+dockerConfig: {% raw %}'{"auths": { "{% endraw %}{{ registryUrl }}{% raw %}": { "auth": "{% endraw %}{{ registryToken }}{% raw %}"}}}'{% endraw %}
+
+env_basic_auth:
+  username: "{{ env_basic_auth.username }}"
+  password: "{{ env_basic_auth.password }}"
+
+deployments:
+  frontend:
+    replicas: 2
+    image: "{{ registryUrl }}/itbc-devops-test/pa-front-nginx"  
+    version: latest
+    paths:
+      - path: "/"
+    port: 80
+    probePath: "/"
+    env:  
+      REACT_APP_API_URL: http://preprod.pa.bootcamp.lan
+  backend:
+    replicas: 2
+    image: "{{ registryUrl }}/itbc-devops-test/pa-backend"
+    version: latest
+    paths:
+      - path: "/api"
+      - path: "/back_static"
+      - path: "/admin"
+    port: 8000
+    probePath: "/api"
+    volume:
+      storageSize: 500Mi
+      mountPath: /app/.artifacts/media/children_profile_images
+      subPath: backend_volume
+    initContainer:
+      image: postgres:15.2
+      probe: 'until pg_isready -h database; do echo "Waiting for PostgreSQL..."; sleep 2; done;'
+    env:
+      PRIMARY_DATABASE_URL: "postgres://{{ PA_POSTGRES_USER }}:{{ PA_POSTGRES_PASSWORD }}@database:5432/{{ PA_POSTGRES_DB }}"
+      ALLOWED_HOSTS: "*"
+      SECRET_KEY: "{{ PA_SECRET_KEY }}"
+      MSSQL_DATABASE_HOST: "{{ MSSQL_DATABASE_HOST }}"
+      MSSQL_DATABASE_NAME: "{{ MSSQL_DATABASE_NAME }}"
+      MSSQL_DATABASE_USERNAME: "{{ MSSQL_DATABASE_USERNAME }}"
+      MSSQL_DATABASE_PASSWORD: "{{ MSSQL_DATABASE_PASSWORD }}"
+      MSSQL_DATABASE_PORT: "{{ MSSQL_DATABASE_PORT }}"
+      DJANGO_SUPERUSER_USERNAME: "{{ PA_DJANGO_SUPERUSER_USERNAME }}"
+      DJANGO_SUPERUSER_PASSWORD: "{{ PA_DJANGO_SUPERUSER_PASSWORD }}"
+      DJANGO_SUPERUSER_EMAIL: "{{ PA_DJANGO_SUPERUSER_EMAIL }}"
+      DEBUG: "True"
+      BACK_VERSION: latest
+      IMAGES_PATH: /app/.artifacts/media/children_profile_images
+  dbmanagement:
+    replicas: 1
+    probePath: "/"
+    subdomain: pgadmin
+    securityContext:
+      runAsUser: 5050
+      runAsGroup: 5050
+      fsGroup: 5050
+    image: dpage/pgadmin4
+    version: 7.5
+    port: 80
+    volume:
+      storageSize: 200Mi
+      mountPath: /var/lib/pgadmin
+      subPath: pgadmin
+    env:  
+      PGADMIN_DEFAULT_EMAIL: "{{ PA_PGADMIN_DEFAULT_EMAIL }}"
+      PGADMIN_DEFAULT_PASSWORD: "{{ PA_PGADMIN_DEFAULT_PASSWORD }}"
+
+statefulsets:
+  database:
+    replicas: 1
+    image: postgres:15.2
+    port: 5432
+    volume:
+      storageSize: 500Mi
+      mountPath: /var/lib/postgresql/data
+      subPath: postgres
+    env:  
+      POSTGRES_DB: "{{ PA_POSTGRES_DB }}"
+      POSTGRES_USER: "{{ PA_POSTGRES_USER }}"
+      POSTGRES_PASSWORD: "{{ PA_POSTGRES_PASSWORD }}"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      PGUSER: "{{ PA_POSTGRES_USER }}"
+      PGDATABASE: "{{ PA_POSTGRES_DB }}"
+    probe: 'pg_isready'

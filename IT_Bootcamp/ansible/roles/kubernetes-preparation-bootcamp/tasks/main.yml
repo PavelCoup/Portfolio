@@ -1,0 +1,45 @@
+---
+- name: Set hostname if hostname is defined
+  hostname:
+    name: "{{ hostname }}"
+  when: hostname is defined
+
+- name: Disable UFW
+  shell: sudo ufw disable || true
+
+- name: Remove entries containing 'bootcamp.lan'
+  lineinfile:
+    path: /etc/hosts
+    regexp: ".*bootcamp\\.lan.*"
+    state: absent
+
+- name: Add entry to hosts file
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item }}"
+    state: present
+    create: yes
+  loop: "{{ kubernates_hosts }}"
+
+- name: Disable swap
+  shell: swapoff -a || true
+
+- name: Comment out swap entries
+  replace:
+    path: /etc/fstab
+    regexp: '^(.*swap.*)$'
+    replace: '# \1'
+
+- name: Stop all containers
+  shell: docker stop $(docker ps -aq) || true
+
+- name: Prune Docker system
+  shell: docker system prune -a --force || true
+
+- name: Remove Docker CE package
+  apt:
+    name: docker-ce
+    state: absent
+
+- name: Remove docker-related files
+  shell: "find /etc/apt/sources.list.d/ -name *docker* | xargs rm || true" 

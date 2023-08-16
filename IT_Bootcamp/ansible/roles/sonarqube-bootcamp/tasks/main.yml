@@ -1,0 +1,154 @@
+---
+- name: set vm.max_map_count kernel setting to 262144
+  sysctl:
+    name: vm.max_map_count
+    value: "262144"
+    state: present
+    reload: true
+
+- name: Creation of Sonarqube containers
+  docker_container:
+    name: "{{ item.container_name }}"
+    image: "{{ item.base_image }}"
+    state: started
+    restart_policy: always
+    env: "{{ item.env }}"
+    volumes: "{{ item.volumes }}"
+    networks: 
+      - name: "bridge"
+      - name: "{{ docker_network_name }}"
+    ports: "{{ item.ports }}"
+  loop: "{{ sonarqube_containers }}"
+
+- name: Wait for SonarQube to start
+  wait_for:
+    host: "{{ sonarqube_url }}"
+    port: "{{ sonarqube_port }}"
+    timeout: 300
+
+- name: Check SonarQube API status
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/system/status
+    method: GET
+    user: admin
+    password: admin
+    force_basic_auth: true
+    return_content: yes
+  register: api_response
+  until: api_response.json.status == "UP"
+  retries: 30
+  delay: 10
+
+- name: Check whether the password of the admin is standard
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/users/search
+    method: GET
+    user: admin
+    password: admin
+    force_basic_auth: true
+    status_code: 
+      - 200
+      - 401
+  register: api_response
+
+- name: Update admin password via SonarQube API
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/users/change_password?login=admin&password={{sonarqube_admin_password}}&previousPassword=admin
+    method: POST
+    user: admin
+    password: admin
+    force_basic_auth: true
+    status_code: 
+      - 204
+  when: api_response.status == 200
+
+- name: add sonarqube permission templates
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/permissions/create_template?name={{ item.name }}&projectKeyPattern={{ item.projectKeyPattern }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 200
+      - 400
+  loop: "{{ sonarqube_permission_template }}"
+
+- name: add admin to permission templates
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/permissions/add_user_to_template?login=admin&permission=admin&templateName={{ item.name }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 204
+  loop: "{{ sonarqube_permission_template }}"
+
+- name: add projects
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/projects/create?name={{ item.name }}&project={{ item.name }}&visibility={{ item.visibility }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 200
+      - 400
+  loop: "{{ sonarqube_projects }}"
+
+- name: add main branch
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/project_branches/rename?name={{ item.branch }}&project={{ item.name }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 204
+  loop: "{{ sonarqube_projects }}"
+
+- name: add users
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/users/create?login={{ item.name }}&name={{ item.name }}&password={{ item.password }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 200
+      - 400
+  loop: "{{ sonarqube_users }}"
+
+- name: Change users passwords
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/users/change_password?login={{ item.name }}&password={{ item.password }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 204
+  loop: "{{ sonarqube_users }}"
+
+- name: add uses to permission templates
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/permissions/add_user_to_template?login={{ item.name }}&permission={{ item.permission }}&templateName={{ item.templateName }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 204
+  loop: "{{ sonarqube_users }}"
+
+- name: Apply permission templates to projects
+  uri:
+    url: http://{{ sonarqube_url }}:{{ sonarqube_port }}/api/permissions/apply_template?projectKey={{ item.name }}&templateName={{ item.templateName }}
+    method: POST
+    user: admin
+    password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    status_code: 
+      - 204
+  loop: "{{ sonarqube_projects }}"

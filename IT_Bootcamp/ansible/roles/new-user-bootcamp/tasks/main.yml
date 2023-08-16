@@ -1,0 +1,43 @@
+- name: Create a group
+  group:
+    name: "{{ group }}"
+    state: present
+
+- name: Add the user with sudo group
+  user:
+    name: "{{ new_user }}"
+    password: "{{ new_sudo_pass | password_hash('sha512') }}"
+    comment: "{{ new_user }}"
+    shell: /bin/bash
+    groups:
+      - sudo
+      - "{{ group }}"
+    append: yes
+
+- name: Add to sudo
+  lineinfile:
+    path: /etc/sudoers.d/{{ new_user }}
+    line: "{{ new_user }} ALL=(ALL) NOPASSWD: ALL"
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Set up multiple authorized keys
+  authorized_key:
+    user: "{{ new_user }}"
+    state: present
+    key: "{{ item }}"
+  with_items: "{{ ssh_keys }}"
+
+- name: Check the existence of the group docker
+  group:
+    name: docker
+    state: present
+  register: group_check
+
+- name: Add the user to the group docker
+  user:
+    name: "{{ new_user }}"
+    groups: docker
+  when: group_check.changed == false

@@ -1,0 +1,126 @@
+{{- $namePreffix := printf "%s-%s" .Values.project .Values.namespaceSuffix }}
+{{- range $deploimentName, $deploiment := .Values.deployments }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $namePreffix }}-{{ $deploimentName }}-secret
+  namespace: {{ $namePreffix }}-namespace
+type: Opaque
+data:
+  {{- range $key, $value := $deploiment.env }}
+  {{ $key }}: {{ $value | toString | b64enc | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $deploimentName }}
+  namespace: {{ $namePreffix }}-namespace
+spec:
+  selector:
+    app: {{ $namePreffix }}-{{ $deploimentName }}-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ $deploiment.port }}
+---
+{{- if default $deploiment.volume false }}
+apiVersion: v1
+PersistentVolumeClaimapiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $namePreffix }}-{{ $deploimentName }}-longhorn-pvc
+  namespace: {{ $namePreffix }}-namespace
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: {{ $deploiment.volume.storageSize }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $namePreffix }}-{{ $deploimentName }}-deployment
+  namespace: {{ $namePreffix }}-namespace
+  labels:
+    app: {{ $namePreffix }}-{{ $deploimentName }}-app
+spec:
+  replicas: {{ $deploiment.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $namePreffix }}-{{ $deploimentName }}-app
+  template:
+    metadata:
+      labels:
+        app: {{ $namePreffix }}-{{ $deploimentName }}-app
+    spec:
+      {{- if default $deploiment.securityContext false }}
+      securityContext:
+        runAsUser: {{ $deploiment.securityContext.runAsUser }}
+        runAsGroup: {{ $deploiment.securityContext.runAsGroup }}
+        fsGroup: {{ $deploiment.securityContext.fsGroup }}
+      {{- end }}
+      containers:
+      - name: {{ $namePreffix }}-{{ $deploimentName }}
+        image: {{ $deploiment.image }}:{{ $deploiment.version }}
+        envFrom:
+          - secretRef:
+              name: {{ $namePreffix }}-{{ $deploimentName }}-secret
+        ports:
+          - containerPort: {{ $deploiment.port }}
+        {{- if default $deploiment.entrypoint false }}
+        command: ['sh', '-c', {{ $deploiment.entrypoint | quote }}]
+        {{- end }}
+        {{- if default $deploiment.probePath false }}
+        readinessProbe:
+          httpGet:
+            path: {{ $deploiment.probePath }}
+            port: {{ $deploiment.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: {{ $deploiment.probePath }}
+            port: {{ $deploiment.port }}
+          initialDelaySeconds: 15
+          periodSeconds: 15 
+        {{- else if default $deploiment.tcpSocketProbe false}}
+        readinessProbe:
+          tcpSocket:
+            port: {{ $deploiment.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: {{ $deploiment.port }}
+          initialDelaySeconds: 15
+          periodSeconds: 15 
+        {{- end }}  
+        {{- if default $deploiment.volume false }}
+        volumeMounts:
+          - name: {{ $namePreffix }}-{{ $deploimentName }}-volume
+            mountPath: {{ $deploiment.volume.mountPath }}
+        {{- end }}
+      imagePullSecrets:
+        - name: {{ $namePreffix }}-docker-secret
+      {{- if default $deploiment.initContainer false }}
+      initContainers:
+        - name: {{ $namePreffix }}-init-database
+          image: {{ $deploiment.initContainer.image }}
+          envFrom:
+            - secretRef:
+                name: {{ $namePreffix }}-database-secret
+          command: ['sh', '-c', {{ $deploiment.initContainer.probe | quote }}]
+      {{- end }}
+      {{- if default $deploiment.volume false }}
+      volumes:
+        - name: {{ $namePreffix }}-{{ $deploimentName }}-volume
+          persistentVolumeClaim:
+            claimName: {{ $namePreffix }}-{{ $deploimentName }}-longhorn-pvc
+      {{- end }}
+{{- end }}
+

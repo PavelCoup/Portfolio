@@ -1,0 +1,5 @@
+---
+cadvisor_version: v0.47.2
+project_name: test
+docker_network_name: net_{{ project_name }}
+storage_duration: 1m0s

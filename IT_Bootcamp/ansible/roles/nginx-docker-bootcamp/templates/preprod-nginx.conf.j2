@@ -1,0 +1,93 @@
+#jinja2: trim_blocks: "true", lstrip_blocks: "false"
+
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    map $host $frontend {
+        {% for item in nginx_environments %}
+        "{{item.environment}}.bootcamp.lan" "{{item.environment}}-frontend";
+        {% endfor %}
+    }
+
+    map $host $backend {
+        {% for item in nginx_environments %}
+        "{{item.environment}}.bootcamp.lan" "{{item.environment}}-backend";
+        {% endfor %}
+    }
+
+    map $host $backend_port {
+        {% for item in nginx_environments %}
+        "{{item.environment}}.bootcamp.lan" "{{item.backend_port}}";
+        {% endfor %}
+    }
+
+    {% set nginx_cors %}
+        
+        if ($host ~* ^({% for item in nginx_environments -%}{{ item.environment }}.bootcamp.lan{% if not loop.last -%}|{%- endif %}{%- endfor %})$) {
+            add_header 'Access-Control-Allow-Origin' $http_origin always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' always;
+            add_header 'Access-Control-Expose-Headers' 'Content-Length,Content-Range' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+            add_header Content-Security-Policy "worker-src blob:;
+            child-src blob: gap:;
+            img-src 'self' blob: data:;
+            default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: content:" always;
+        }
+    {% endset %}
+    {% set nginx_proxy_ %}
+        
+        proxy_read_timeout 120s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_pass_request_headers on;
+    {% endset %}
+
+    server {
+        listen 80;
+        server_name {% for item in nginx_environments %}{{ item.environment }}.bootcamp.lan{% if not loop.last %} {% endif %}{% endfor %};
+
+        location / {
+            resolver 127.0.0.11;
+            proxy_pass http://${frontend}:80;
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+
+        location /api {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+        {{ ngins_custom_locations | indent(4, False) }}
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}

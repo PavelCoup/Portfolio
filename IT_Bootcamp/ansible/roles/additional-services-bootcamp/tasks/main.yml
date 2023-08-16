@@ -1,0 +1,14 @@
+---
+- name: Creation of additional services containers
+  docker_container:
+    name: "{{ item.container_name }}"
+    image: "{{ item.base_image }}"
+    state: started
+    restart_policy: always
+    env: "{{ item.env }}"
+    volumes: "{{ item.volumes }}"
+    networks: 
+      - name: "{{ docker_network_name }}"
+    ports:
+      - "{{ item.db_port }}"
+  loop: "{{ additional_services_containers }}"

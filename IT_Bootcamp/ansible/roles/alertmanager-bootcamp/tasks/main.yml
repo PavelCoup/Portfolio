@@ -1,0 +1,26 @@
+---
+- name: Create Folder /srv/alertmanager if not exist
+  file:
+    path: /home/{{ ansible_user }}/alertmanager
+    state: directory
+
+- name: Create alertmanager configuration file
+  template:
+    dest: /home/{{ ansible_user }}/alertmanager/alertmanager.yml
+    src: alertmanager.j2
+
+- name: Create Alertmanager container
+  docker_container:
+    name: alertmanager
+    restart_policy: always
+    image: prom/alertmanager:{{ alertmanager_version }}
+    volumes:
+      - alertmanager-data:/data
+      - /home/{{ ansible_user }}/alertmanager:/config
+    command: >
+      --config.file=/config/alertmanager.yml 
+      --log.level=debug
+    published_ports: "9093:9093"
+    networks: 
+      - name: "{{ docker_network_name }}"
+      - name: "bridge"    

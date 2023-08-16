@@ -1,0 +1,34 @@
+---
+- name: Check if Longhorn Helm repository is already added
+  shell: helm repo list | grep -c longhorn || true
+  register: helm_repo_check
+
+- name: Add Longhorn Helm repository
+  shell: helm repo add longhorn https://charts.longhorn.io
+  when: helm_repo_check.stdout == 0
+
+- name: Update Helm repositories
+  shell: helm repo update
+
+- name: Check if Longhorn Helm chart is already installed
+  shell: helm list -n longhorn-system | grep -c longhorn || true
+  register: helm_chart_check
+
+- name: Install Longhorn Helm chart
+  shell: helm install longhorn longhorn/longhorn --namespace longhorn-system --create-namespace
+  when: helm_chart_check.stdout == 0
+
+- name: Check if the desired Ingress exists
+  shell: kubectl get ingress -n longhorn-system | grep -c longhorn-frontend || true
+  register: ingress_check
+
+- name: Copying a longhorn-ingress.yaml file using a jinja2 template
+  template:
+    src: longhorn-ingress.yaml.j2
+    dest: "/home/{{ ansible_user }}/kube/longhorn-ingress.yaml"
+    mode: 0755
+  when: ingress_check.stdout == 0
+
+- name: Apply Longhorn Ingress YAML
+  shell: kubectl apply -f /home/{{ ansible_user }}/kube/longhorn-ingress.yaml -n longhorn-system
+  when: ingress_check.stdout == 0

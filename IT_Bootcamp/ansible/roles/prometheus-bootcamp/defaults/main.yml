@@ -1,0 +1,26 @@
+---
+prometheus_version: v2.40.1
+grafana_version: "9.2.5"
+alertmanager_version: v0.24.0
+project_name: test
+docker_network_name: net_{{ project_name }}
+prometheus_url: 'prometheus:9090'
+alertmanager_url: 'alertmanager:9093'
+storage_tsdb_retention_size: 5GB
+
+prometheus_project_lists:
+  - project: testProject3
+    container_down_duration: 2m
+    targets:
+      - 'cadvisor.testProject3.bootcamp.lan:9101'
+      - 'node-exporter.testProject3.bootcamp.lan:9102'
+    containers: 
+      - node-exporter
+      - cadvisor 
+      - db-qa-testProject3
+      - db-dev-testProject3
+      - nginx
+      - dev-testProject3-backend
+      - dev-testProject3-frontend
+      - qa-testProject3-backend
+      - qa-testProject3-frontend 

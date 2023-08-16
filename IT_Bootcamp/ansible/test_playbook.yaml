@@ -1,0 +1,24 @@
+---
+- name: Use of roles on the host
+  hosts: all
+  become: true
+  roles:
+    # - new-user-bootcamp
+    # - docker-bootcamp
+    # - coredns-bootcamp
+    # - dns-client-bootcamp
+    # - nginx-docker-bootcamp
+    # - volumes-bootcamp
+    - additional-services-bootcamp
+    # - loki-bootcamp
+    # - grafana-bootcamp
+    # - alertmanager-bootcamp
+    # - cadvisor-bootcamp
+    # - node-exporter-bootcamp
+    # - prometheus-bootcamp
+    # - gitlab-runner-docker-bootcamp
+    # - sonarqube-bootcamp
+    # - docker-volume-cleanup-bootcamp
+    # - kubernetes-preparation-bootcamp
+    # - kubernetes-bootcamp
+    # - helm-chart-bootcamp

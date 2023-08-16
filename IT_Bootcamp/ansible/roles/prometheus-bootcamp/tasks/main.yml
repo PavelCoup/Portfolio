@@ -1,0 +1,38 @@
+---
+- name: Create Folder /home/{{ ansible_user }}/prometheus if not exist
+  file:
+    path: /home/{{ ansible_user }}/prometheus
+    state: directory
+
+- name: Create prometheus configuration file
+  template:
+    dest: /home/{{ ansible_user }}/prometheus/prometheus.yml
+    src: prometheus_main.yml.j2
+
+- name: Create prometheus alert configuration file
+  template:
+    dest: /home/{{ ansible_user }}/prometheus/prometheus_alerts_rules.yml
+    src: prometheus_alerts_rules.yml.j2
+
+- name: Create Prometheus container
+  docker_container:
+    name: prometheus
+    restart_policy: always
+    image: prom/prometheus:{{ prometheus_version }}
+    volumes:
+      - /home/{{ ansible_user }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - /home/{{ ansible_user }}/prometheus/prometheus_alerts_rules.yml:/etc/prometheus/prometheus_alerts_rules.yml
+      - prometheus_main_data:/prometheus
+    command: >
+      --config.file=/etc/prometheus/prometheus.yml
+      --storage.tsdb.path=/prometheus
+      --storage.tsdb.retention.size={{ storage_tsdb_retention_size }}
+      --web.console.libraries=/etc/prometheus/console_libraries
+      --web.console.templates=/etc/prometheus/consoles
+      --web.enable-lifecycle
+    published_ports: "9090:9090"
+    state: started
+    restart: yes
+    networks: 
+      - name: "{{ docker_network_name }}"
+      - name: "bridge"

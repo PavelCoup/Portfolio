@@ -1,0 +1,5 @@
+group: example-group
+new_user: example-user
+new_sudo_pass: example-password
+ssh_keys:
+  - example-key

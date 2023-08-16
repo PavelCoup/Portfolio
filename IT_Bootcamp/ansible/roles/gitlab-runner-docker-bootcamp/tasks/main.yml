@@ -1,0 +1,37 @@
+---
+- name: Creating a folder
+  file:
+    path: /home/{{ ansible_user }}/gitlab-runners/{{ item.runner_name }}
+    state: directory
+    mode: 0755
+  loop: "{{ gitlab_runners }}"
+
+- name: Start GitLab runner container
+  docker_container:
+    name: "{{ item.runner_name }}"
+    image: gitlab/gitlab-runner:latest
+    restart_policy: always
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "/home/{{ ansible_user }}/gitlab-runners/{{ item.runner_name }}:/etc/gitlab-runner/"
+  loop: "{{ gitlab_runners }}"
+
+- name: Register GitLab Runner
+  command: >-
+    docker exec -it {{ item.runner_name }} gitlab-runner register
+    --non-interactive
+    --name "{{ item.runner_name }}"
+    --url "{{ gitlab_url }}"
+    --registration-token "{{ runner_token }}"
+    --executor "{{ item.executor }}"
+    --docker-image "docker:latest"
+    --docker-pull-policy "if-not-present"
+    --tag-list "{{ item.executor }},{{ item.project }},{{ item.type }}"
+    --access-level="not_protected"
+    --locked="false"
+    {% if item.type == 'dind' %}
+    --docker-privileged
+    {% elif item.type == 'sock' %}
+    --docker-volumes "/var/run/docker.sock:/var/run/docker.sock"
+    {% endif %}
+  loop: "{{ gitlab_runners }}"

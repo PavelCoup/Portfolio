@@ -1,0 +1,416 @@
+---
+all:
+  vars:
+    ansible_user: testuser
+    ansible_ssh_pass: "testpassword"
+    ansible_sudo_pass: "{{ ansible_ssh_pass }}"
+    ansible_become: true
+    ansible_become_method: sudo
+    new_user: "{{ ansible_user }}"
+    new_sudo_pass: "{{ ansible_sudo_pass }}"
+    group: "{{ ansible_user }}"
+    ssh_keys:
+      - "{{ lookup('url', 'https://github.com/someuser1.keys', split_lines=False) }}"
+      - "{{ lookup('url', 'https://github.com/someuser2.keys', split_lines=False) }}"
+      - "{{ lookup('url', 'https://git.some.site/someuser3.keys', split_lines=False) }}"
+      - "{{ lookup('url', 'https://github.com/someuser4.keys', split_lines=False) }}"
+    ansible_ssh_common_args: '-o PreferredAuthentications=publickey -o StrictHostKeyChecking=no'
+    gitlab_url: "https://git.some.site/"
+    runner_token: "testToken"
+    gitlab_runners:
+      - runner_name: runner_testuser_1
+        project: testProject3
+        executor: docker
+        type: dind
+      - runner_name: runner_testuser_2
+        project: testProject3
+        executor: docker
+        type: sock
+    dnsserver: 192.168.0.2
+    dnsprefix: someproject.lan
+    dns_list:
+      - "192.168.1.3 testlab.testProject1.{{dnsprefix}}"
+      - "192.168.1.3 dev.testProject1.{{dnsprefix}}"
+      - "192.168.1.3 qa.testProject1.{{dnsprefix}}"
+      - "192.168.1.3 cadvisor.testProject1.{{dnsprefix}}"
+      - "192.168.1.3 node-exporter.testProject1.{{dnsprefix}}"
+      - "192.168.1.4 testlab.testProject2.{{dnsprefix}}"
+      - "192.168.1.4 dev.testProject2.{{dnsprefix}}"
+      - "192.168.1.4 qa.testProject2.{{dnsprefix}}"
+      - "192.168.1.4 cadvisor.testProject2.{{dnsprefix}}"
+      - "192.168.1.4 node-exporter.testProject2.{{dnsprefix}}"
+      - "192.168.1.14 devops.{{dnsprefix}}"
+      - "192.168.1.14 grafana.{{dnsprefix}}"
+      - "192.168.1.14 loki.{{dnsprefix}}"
+      - "192.168.1.14 prometheus.{{dnsprefix}}"
+      - "192.168.1.14 cadvisor.devops.{{dnsprefix}}"
+      - "192.168.1.14 node-exporter.devops.{{dnsprefix}}"
+      - "192.168.1.14 sonar.{{dnsprefix}}"
+      - "192.168.1.16 itcrm4.{{dnsprefix}}"
+      - "192.168.1.7 testlab.testProject3.{{dnsprefix}}"
+      - "192.168.1.7 dev.testProject3.{{dnsprefix}}"
+      - "192.168.1.7 qa.testProject3.{{dnsprefix}}"
+      - "192.168.1.7 cadvisor.testProject3.{{dnsprefix}}"
+      - "192.168.1.7 node-exporter.testProject3.{{dnsprefix}}"
+    grafana_version: "9.2.5"
+    grafana_url: "http://localhost:3000"
+    grafana_admin_user: testuser
+    grafana_admin_password: testpassword
+    grafana_users:
+      - name: testuser
+        email: testuser@user.com
+        login: testuser
+        password: testpassword
+        state: present
+    grafana_team:
+      - name: testuser_team
+        email: testuser@team.com
+        members: testuser@user.com
+        folder: testuser_folder
+        state: present
+    grafana_folder:
+      - title: "testuser_folder"
+        state: present      
+    grafana_datasource:
+      - name: "Loki"
+        uid: "SX_U33UVz1"
+        ds_type: "loki"
+        ds_url: http://loki:3100
+      - name: "Prometheus"
+        uid: "SX_U33UVz2"
+        ds_type: "prometheus"
+        ds_url: http://prometheus:9090  
+    grafana_dashboard:
+      - folder: "testProject3_folder"
+        state: present
+        overwrite: yes
+        path: "/home/{{ ansible_user }}/grafana/cont-logs-testuser-backend.json"
+      - folder: "testProject3_folder"
+        state: present
+        overwrite: yes
+        path: "/home/{{ ansible_user }}/grafana/cont-logs-testuser-frontend.json"
+      - folder: "General"
+        state: present
+        overwrite: yes
+        path: "/home/{{ ansible_user }}/grafana/node-exporter.json" 
+      - folder: "General"
+        state: present
+        overwrite: yes
+        path: "/home/{{ ansible_user }}/grafana/cadvisor.json"  
+    prometheus_version: v2.40.1
+    prometheus_url: 'http://prometheus:9090'
+    prometheus_project_lists:
+      - project: testProject3
+        container_down_duration: 2m
+        targets:
+          - 'cadvisor.testuser.some.site.lan:9101'
+          - 'node-exporter.testuser.some.site.lan:9102'
+        containers: 
+          - node-exporter
+          - cadvisor 
+          - db-qa-testuser
+          - db-dev-testuser
+          - nginx
+          - dev-testuser-backend
+          - dev-testuser-frontend
+          - qa-testuser-backend
+          - qa-testuser-frontend
+      - project: devops
+        container_down_duration: 2m
+        targets:
+          - 'cadvisor.devops.some.site.lan:9101'
+          - 'node-exporter.devops.some.site.lan:9102'
+        containers: 
+          - node-exporter
+          - cadvisor 
+    alertmanager_url: 'alertmanager:9093'
+    alertmanager_version: v0.24.0
+    telegram_bot_token: 'testToken'
+    telegram_chat_id: -1111111111111
+    sonarqube_image: sonarqube:latest
+    sonarqube_admin_password: testpassword
+    sonarqube_url: "localhost"
+    sonarqube_port: "9000"
+    postgres_image: postgres:13
+    sonarqube_postgres_user: testuser
+    sonarqube_postgres_password: testpassword
+    sonarqube_postgres_db: testDb
+    sonarqube_postgres_port: "5433"
+    sonarqube_permission_template:
+      - name: testuser-back
+        projectKeyPattern: ".*testuser-back.*"
+    sonarqube_projects:
+      - name: testuser-back
+        templateName: testuser-back
+        visibility: private
+        branch: develop
+    sonarqube_users:
+      - name: testuser-back
+        password: testpassword
+        templateName: testuser-back
+        permission: admin
+  hosts:
+    testlab.testProject1.some.site.lan:
+      ansible_host: 192.168.1.3
+      project_name: testProject1
+      docker_network_name: "net_{{project_name}}"
+      nginx_environments:
+        - environment: dev
+          backend_port: 8000
+          db_port: 5432
+        - environment: qa
+          backend_port: 8000
+          db_port: 5432
+      ngins_custom_locations: |
+        location /admin {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+
+        location /back_static {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+      volumes:
+        - volume_db_qa_{{project_name}}
+        - volume_db_dev_{{project_name}}
+        - volume_id_dev_{{project_name}}
+        - volume_id_qa_{{project_name}}
+      additional_services_containers:
+        - container_name: db-dev-{{project_name}}
+          base_image: "postgres:15.2"
+          db_port: 5433:5432
+          volumes:
+            - "volume_db_dev_{{project_name}}:/var/lib/postgresql/data"
+          env:
+            POSTGRES_DB: testDb
+            POSTGRES_USER: "testuser"
+            POSTGRES_PASSWORD: "testpassword"
+            POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+        - container_name: db-qa-{{project_name}}
+          base_image: "postgres:15.2"
+          db_port: 5432:5432
+          volumes:
+            - "volume_db_qa_{{project_name}}:/var/lib/postgresql/data"
+          env:
+            POSTGRES_DB: testDb
+            POSTGRES_USER: "testuser"
+            POSTGRES_PASSWORD: "testpassword"
+            POSTGRES_HOST_AUTH_METHOD: scram-sha-256      
+    testlab.testProject2.some.site.lan:
+      ansible_host: 192.168.1.4
+      project_name: testProject2
+      docker_network_name: "net_{{project_name}}"
+      volumes:
+        - volume_db_qa_{{project_name}}
+        - volume_db_dev_{{project_name}}
+        - volume_id_dev_{{project_name}}
+        - volume_id_qa_{{project_name}}
+      additional_services_containers:
+        - container_name: db-dev-{{project_name}}
+          base_image: "mysql:latest"
+          db_port: 3307:3306
+          volumes:
+            - "volume_db_dev_{{project_name}}:/var/lib/mysql"
+          env:
+            MYSQL_DATABASE: testDb
+            MYSQL_ROOT_PASSWORD: "testpassword"
+            MYSQL_USER: "testuser"
+            MYSQL_PASSWORD: "testpassword"
+        - container_name: db-qa-{{project_name}}
+          base_image: "mysql:latest"
+          db_port: 3306:3306
+          volumes:
+            - "volume_db_qa_{{project_name}}:/var/lib/mysql"
+          env:
+            MYSQL_DATABASE: testDb
+            MYSQL_ROOT_PASSWORD: "testpassword"
+            MYSQL_USER: "testuser"
+            MYSQL_PASSWORD: "testpassword"
+    devops.some.site.lan:
+      ansible_host: 192.168.1.5
+      project_name: devops
+      docker_network_name: "net_{{project_name}}"
+    osx.some.site.lan:
+      ansible_host: 192.168.1.6
+    testlab.testProject3.some.site.lan:
+      ansible_host: 192.168.1.7
+      project_name: testProject3
+      docker_network_name: "net_{{project_name}}"
+      nginx_environments:
+        - environment: dev
+          backend_port: 8000
+          db_port: 5432
+        - environment: qa
+          backend_port: 8000
+          db_port: 5432
+      ngins_custom_locations: |
+        location /auth/ {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+        
+        location /admin {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+
+        location /back_static {
+            resolver 127.0.0.11;
+            proxy_pass http://${backend}:${backend_port};
+            {{ nginx_proxy_ | indent(4, False) }}
+            {{ nginx_cors | indent(4, False) }}
+        }
+      volumes:
+        - volume_db_qa_{{project_name}}
+        - volume_db_dev_{{project_name}}
+        - volume_redis_qa_{{project_name}}
+        - volume_redis_dev_{{project_name}}
+        - volume_id_dev_{{project_name}}
+        - volume_id_qa_{{project_name}}
+      additional_services_containers:
+        - container_name: db-dev-{{project_name}}
+          base_image: "postgres:15.2"
+          db_port: 5433:5432
+          volumes:
+            - "volume_db_dev_{{project_name}}:/var/lib/postgresql/data"
+          env:
+            POSTGRES_DB: testDb
+            POSTGRES_USER: "testuser"
+            POSTGRES_PASSWORD: "testpassword"
+            POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+        - container_name: db-qa-{{project_name}}
+          base_image: "postgres:15.2"
+          db_port: 5432:5432
+          volumes:
+            - "volume_db_qa_{{project_name}}:/var/lib/postgresql/data"
+          env:
+            POSTGRES_DB: testDb
+            POSTGRES_USER: "testuser"
+            POSTGRES_PASSWORD: "testpassword"
+            POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+        - container_name: redis-dev-{{project_name}}
+          base_image: "redis:7.0.12-alpine3.18"
+          db_port: 6379:6379
+          volumes:
+            - "volume_redis_dev_{{project_name}}:/data"
+          env:
+            REDIS_VER: "7.0.12"
+        - container_name: redis-qa-{{project_name}}
+          base_image: "redis:7.0.12-alpine3.18"
+          db_port: 6380:6379
+          volumes:
+            - "volume_redis_qa_{{project_name}}:/data"
+          env:
+            REDIS_VER: "7.0.12"
+    control1.some.site.lan:
+      ansible_host: 192.168.1.11
+      hostname: control1.some.site.lan
+    worker1.some.site.lan:
+      ansible_host: 192.168.1.12
+      hostname: worker1.some.site.lan
+    worker2.some.site.lan:
+      ansible_host: 192.168.1.13
+      hostname: worker2.some.site.lan
+  children:
+    testlabs:
+      hosts:
+        testlab.testProject3.some.site.lan:
+        testlab.testProject1.some.site.lan:
+        testlab.testProject2.some.site.lan:
+      vars:
+        roles:
+          - volumes-bootcamp
+          - additional-services-bootcamp
+          - cadvisor-bootcamp
+          - dns-client-bootcamp
+          - log-driver-bootcamp
+          - node-exporter-bootcamp
+          - nginx-bootcamp
+    devops:
+      hosts:
+        devops.bootcamp.lan:
+      vars:
+        roles:
+          - log-driver-bootcamp
+          - coredns-bootcamp
+          - cadvisor-bootcamp
+          - node-exporter-bootcamp
+          - alertmanager-bootcamp
+          - prometheus-bootcamp
+          - grafana-bootcamp
+          - loki-bootcamp
+          - gitlab-runner-docker-bootcamp
+          - docker-volume-cleanup-bootcamp
+    kube:
+      hosts:
+        control1.some.site.lan:
+        worker1.some.site.lan:
+        worker2.some.site.lan:
+      vars:
+        kubernates_hosts:
+          - "192.168.1.11 control1.some.site.lan"
+          - "192.168.1.12 worker1.some.site.lan"
+          - "192.168.1.13 worker2.some.site.lan"
+        main_server: 192.168.205.11
+        longhorn_url: longhorn.some.site.lan
+        kubernetes_pod_network:
+          cni: 'calico'
+          cidr: '192.168.2.0/16'
+        worker_nodes:
+          - worker1.some.site.lan
+          - worker2.some.site.lan
+        registryUrl: jfrog.some.site
+        registryToken: testToken
+        env_basic_auth:
+          username: testuser
+          password: testpassword
+        MSSQL_DATABASE_HOST: 192.168.1.16
+        MSSQL_DATABASE_NAME: testDb
+        MSSQL_DATABASE_USERNAME: testuser_readonly
+        MSSQL_DATABASE_PASSWORD: testpassword
+        MSSQL_DATABASE_PORT: 1433
+        testProject2_SECRET_KEY: 'testKey'
+        testProject2_DJANGO_SUPERUSER_USERNAME: "testuser"  
+        testProject2_DJANGO_SUPERUSER_PASSWORD: "testpassword"
+        testProject2_PGADMIN_DEFAULT_EMAIL: testuser@admin.com
+        testProject2_PGADMIN_DEFAULT_PASSWORD: testpassword
+        testProject2_POSTGRES_DB: "testDb"
+        testProject2_POSTGRES_USER: "testuser"
+        testProject2_POSTGRES_PASSWORD: "testpassword"
+        testProject1_SECRET_KEY: 'testKey'
+        testProject1_DJANGO_SUPERUSER_USERNAME: testDb
+        testProject1_DJANGO_SUPERUSER_PASSWORD: testpassword
+        testProject1_DJANGO_SUPERUSER_EMAIL: testuser@email.com
+        testProject1_PGADMIN_DEFAULT_EMAIL: testuser@admin.com
+        testProject1_PGADMIN_DEFAULT_PASSWORD: testpassword
+        testProject1_POSTGRES_DB: "testDb"
+        testProject1_POSTGRES_USER: "testuser"
+        testProject1_POSTGRES_PASSWORD: "testpassword"
+        testProject3_MYSQL_DATABASE: testDb
+        testProject3_MYSQL_ROOT_PASSWORD: "testpassword"
+        testProject3_MYSQL_USER: "testuser"
+        testProject3_MYSQL_PASSWORD: "testpassword"
+        testProject3_JWT_SECRET_PHRASE: 'testpassword'
+        roles:
+          - kubernetes-bootcamp
+          - helm-chart-bootcamp
+    kube_controls:
+      hosts:
+        control1.some.site.lan:
+      vars:
+        kubernetes_role: control_plane
+    kube_workers:
+      hosts:
+        worker1.some.site.lan:
+        worker2.some.site.lan:
+      vars:
+        kubernetes_role: node

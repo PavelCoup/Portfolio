@@ -1,0 +1,48 @@
+---
+- name: Creating a folder
+  file:
+    path: /home/{{ansible_user}}/nginx/
+    state: directory
+
+- name: Copying a main configuration file using a jinja2 template
+  template:
+    src: >-
+      {%- if nginx_host_type == 'testlab' -%}
+      testlab-nginx.conf.j2
+      {%- elif nginx_host_type == 'preprod' -%}
+      preprod-nginx.conf.j2
+      {%- elif nginx_host_type == 'monitoring' -%}
+      monitoring-nginx.conf.j2      
+      {%- endif -%}
+    dest: "/home/{{ansible_user}}/nginx/main-nginx.conf"
+
+- name: Copying a index.html file using a jinja2 template
+  template:
+    src: "index.html.j2"
+    dest: "/home/{{ansible_user}}/nginx/index.html"
+
+- name: Copying a styles.css file using a jinja2 template
+  template:
+    src: "styles.css.j2"
+    dest: "/home/{{ansible_user}}/nginx/styles.css"    
+
+- name: Copying a styles.css file using a jinja2 template
+  template:
+    src: "script.js.j2"
+    dest: "/home/{{ansible_user}}/nginx/script.js"  
+
+- name: Run nginx container
+  docker_container:
+    name: nginx
+    image: "{{ nginx_image }}"
+    networks:
+      - name: "{{ docker_network_name }}"
+    restart_policy: always
+    volumes:
+      - /home/{{ ansible_user }}/nginx/main-nginx.conf:/etc/nginx/nginx.conf
+      - /home/{{ ansible_user }}/nginx/index.html:/usr/share/nginx/html/index.html
+      - /home/{{ ansible_user }}/nginx/styles.css:/usr/share/nginx/html/styles.css
+      - /home/{{ ansible_user }}/nginx/script.js:/usr/share/nginx/html/script.js
+    ports:
+      - "80:80"
+      - "443:443"

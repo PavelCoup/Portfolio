@@ -1,0 +1,25 @@
+---
+- name: Install the DNS server on 127.0.0.1 and disconnect the listener DNS in Resolved.conf
+  lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  with_items:
+    - { regexp: '^#?DNS=', line: 'DNS={{dnsserver}} 8.8.8.8 127.0.0.1' }
+
+- name: Configure netplan
+  command: netplan set ethernets.{{ ansible_default_ipv4.interface }}.nameservers.addresses=[{{dnsserver}},8.8.8.8,1.1.1.1]
+
+- name: Apply netplan configuration
+  command: netplan apply
+
+- name: Restart systemd-resolved
+  service:
+    name: systemd-resolved
+    state: restarted
+
+- name: Restart docker
+  service:
+    name: docker
+    state: restarted

@@ -1,0 +1,96 @@
+---
+- name: Create Folder if not exist
+  file:
+    path: /home/{{ ansible_user }}/grafana
+    mode: 0755
+    state: directory
+
+- name: Create grafana configuration files
+  copy:
+    src: grafana
+    dest: /home/{{ ansible_user }}/
+    mode: 0755
+
+- name: Create Grafana container
+  docker_container:
+    name: grafana
+    restart_policy: always
+    image: grafana/grafana:{{ grafana_version }}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    env:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    published_ports: "3000:3000"
+    state: started
+    restart: yes
+    networks: 
+      - name: "{{ docker_network_name }}"
+      - name: "bridge"
+
+- name: Wait for service up
+  uri:
+    url: "http://{{ ansible_host }}:3000"
+    status_code: 200
+  register: __result
+  until: __result.status == 200
+  retries: 120
+  delay: 1
+
+- name: Change admin password for grafana gui
+  shell : docker exec -t grafana bash -c 'grafana-cli --homepath "/usr/share/grafana/" admin reset-admin-password {{ grafana_admin_password }}'
+  register: __command_admin
+  changed_when: __command_admin.rc !=0
+
+- name: Manage user 
+  community.grafana.grafana_user:
+    url: "{{ grafana_url }}"
+    url_username: "{{ grafana_admin_user }}"
+    url_password: "{{ grafana_admin_password }}"
+    name: "{{ item.name }}"
+    email: "{{ item.email }}"
+    login: "{{ item.login }}"
+    password: "{{ item.password }}"
+    state: present
+  loop: "{{ grafana_users }}"
+
+- name: Manage team 
+  community.grafana.grafana_team:
+    url: "{{ grafana_url }}"
+    url_username: "{{ grafana_admin_user }}"
+    url_password: "{{ grafana_admin_password }}"
+    name: "{{ item.name }}"
+    email: "{{ item.email }}"
+    members: "{{ item.members }}"
+    state: present
+  loop: "{{ grafana_team }}"
+
+- name: Create folder 
+  community.grafana.grafana_folder:
+    url: "{{ grafana_url }}"
+    url_username: "{{ grafana_admin_user }}"
+    url_password: "{{ grafana_admin_password }}"
+    title: "{{ item.title }}"
+    state: present 
+  loop: "{{ grafana_folder }}"
+
+- name: Import Grafana dashboard 
+  community.grafana.grafana_dashboard:
+    url: "{{ grafana_url }}"
+    url_username: "{{ grafana_admin_user }}"
+    url_password: "{{ grafana_admin_password }}"
+    state: present
+    folder: "{{ item.folder }}"
+    overwrite: yes
+    path: "{{ item.path }}"    
+  loop: "{{ grafana_dashboard }}"
+
+- name: Manage datasource
+  community.grafana.grafana_datasource:
+    url: "{{ grafana_url }}"
+    url_username: "{{ grafana_admin_user }}"
+    url_password: "{{ grafana_admin_password }}"
+    uid: "{{ item.uid }}"
+    name: "{{ item.name }}"
+    ds_type: "{{ item.ds_type }}"
+    ds_url: "{{ item.ds_url }}"
+  loop: "{{ grafana_datasource }}"

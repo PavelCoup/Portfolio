@@ -1,0 +1,105 @@
+namespaceSuffix: preprod
+project: testProject3
+dnsprefix: bootcamp.lan
+dockerConfig: {% raw %}'{"auths": { "{% endraw %}{{ registryUrl }}{% raw %}": { "auth": "{% endraw %}{{ registryToken }}{% raw %}"}}}'{% endraw %}
+
+env_basic_auth:
+  username: "{{ env_basic_auth.username }}"
+  password: "{{ env_basic_auth.password }}"
+
+deployments:
+  frontend:
+    replicas: 2
+    image: "{{ registryUrl }}/itbc-devops-test/testProject2-front-nginx"
+    version: latest
+    paths:
+      - path: "/"
+    port: 80
+    probePath: "/"
+    env:  
+      REACT_APP_API_URL: http://preprod.testProject2.bootcamp.lan
+  backend:
+    replicas: 2
+    image: "{{ registryUrl }}/itbc-devops-test/testProject2-backend"
+    version: latest
+    paths:
+      - path: "/api"
+      - path: "/back_static"
+      - path: "/admin"
+      - path: "/auth"
+    port: 8000
+    probePath: "/api"
+    initContainer:
+      image: postgres:15.2
+      probe: 'until pg_isready -h database; do echo "Waiting for PostgreSQL..."; sleep 2; done;'
+    env:
+      PRIMARY_DATABASE_URL: postgres://{{ testProject2_POSTGRES_USER }}:{{ testProject2_POSTGRES_PASSWORD }}@database:5432/{{ testProject2_POSTGRES_DB }}
+      ALLOWED_HOSTS: "*"
+      SECRET_KEY: '{{ testProject2_SECRET_KEY }}'
+      DJANGO_SUPERUSER_USERNAME: "{{ testProject2_DJANGO_SUPERUSER_USERNAME }}"
+      DJANGO_SUPERUSER_PASSWORD: "{{ testProject2_DJANGO_SUPERUSER_PASSWORD }}"
+      MSSQL_DATABASE_HOST: "{{ MSSQL_DATABASE_HOST }}"
+      MSSQL_DATABASE_NAME: "{{ MSSQL_DATABASE_NAME }}"
+      MSSQL_DATABASE_USERNAME: "{{ MSSQL_DATABASE_USERNAME }}"
+      MSSQL_DATABASE_PASSWORD: "{{ MSSQL_DATABASE_PASSWORD }}"
+      MSSQL_DATABASE_PORT: "{{ MSSQL_DATABASE_PORT }}"
+      REDIS_DSN: "redis://redis:6379/0"
+      WEBAPP_HOST: "http://backend"
+  backend-scheduler:
+    replicas: 1
+    image: "{{ registryUrl }}/itbc-devops-test/testProject2-backend"
+    version: latest
+    entrypoint: "/project/project/entrypoint-scheduler.sh"
+    port: 8000
+    env:
+      DJANGO_SUPERUSER_USERNAME: "{{ testProject2_DJANGO_SUPERUSER_USERNAME }}"
+      DJANGO_SUPERUSER_PASSWORD: "{{ testProject2_DJANGO_SUPERUSER_PASSWORD }}"
+      REDIS_DSN: "redis://redis:6379/0"
+      WEBAPP_HOST: "http://backend"
+  dbmanagement:
+    replicas: 1
+    probePath: "/"
+    subdomain: pgadmin
+    securityContext:
+      runAsUser: 5050
+      runAsGroup: 5050
+      fsGroup: 5050
+    image: dpage/pgadmin4
+    version: 7.5
+    port: 80
+    volume:
+      storageSize: 200Mi
+      mountPath: /var/lib/pgadmin
+      subPath: pgadmin
+    env:  
+      PGADMIN_DEFAULT_EMAIL: "{{ testProject2_PGADMIN_DEFAULT_EMAIL }}"
+      PGADMIN_DEFAULT_PASSWORD: "{{ testProject2_PGADMIN_DEFAULT_PASSWORD }}"
+
+statefulsets:
+  database:
+    replicas: 1
+    image: postgres:15.2
+    port: 5432
+    volume:
+      storageSize: 500Mi
+      mountPath: /var/lib/postgresql/data
+      subPath: postgres
+    env:  
+      POSTGRES_DB: "{{ testProject2_POSTGRES_DB }}"
+      POSTGRES_USER: "{{ testProject2_POSTGRES_USER }}"
+      POSTGRES_PASSWORD: "{{ testProject2_POSTGRES_PASSWORD }}"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      PGUSER: "{{ testProject2_POSTGRES_USER }}"
+      PGDATABASE: "{{ testProject2_POSTGRES_DB }}"
+    probe: 'pg_isready'
+  redis:
+    replicas: 1
+    image: redis:7.0.12-alpine3.18
+    port: 6379
+    volume:
+      storageSize: 500Mi
+      mountPath: /data
+      subPath: redis
+    env:  
+      REDIS_VER: "7.0.12"
+    probe: 'redis-cli ping | grep PONG'

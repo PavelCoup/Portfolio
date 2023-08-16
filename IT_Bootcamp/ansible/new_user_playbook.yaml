@@ -1,0 +1,6 @@
+---
+- name: Adding a new user
+  hosts: all
+  roles:
+    - new-user-bootcamp
+

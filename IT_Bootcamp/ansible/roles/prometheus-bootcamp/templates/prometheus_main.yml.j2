@@ -1,0 +1,20 @@
+#jinja2: trim_blocks: "true", lstrip_blocks: "false"
+global:
+  scrape_interval: 15s
+  
+scrape_configs:
+{% for item in prometheus_project_lists %}
+  - job_name: {{ item.project }}
+    scrape_interval: 30s
+    static_configs:
+    - targets: {{ item.targets }} 
+{% endfor %}
+    
+rule_files:
+  - prometheus_alerts_rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+      - targets: ["{{ alertmanager_url }}"]
+        

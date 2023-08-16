@@ -1,0 +1,75 @@
+{{- $namePreffix := printf "%s-%s" .Values.project .Values.namespaceSuffix }}
+{{- range $statefulsetName, $statefulset := .Values.statefulsets }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $namePreffix }}-{{ $statefulsetName }}-secret
+  namespace: {{ $namePreffix }}-namespace
+type: Opaque
+data:
+  {{- range $key, $value := $statefulset.env }}
+  {{ $key }}: {{ $value | toString | b64enc | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $statefulsetName }}
+  namespace: {{ $namePreffix }}-namespace
+spec:
+  ports:
+  - port: {{ $statefulset.port }}
+    name: peer
+  clusterIP: None
+  selector:
+    app: {{ $statefulsetName }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $namePreffix }}-{{ $statefulsetName }}-statefulset
+  namespace: {{ $namePreffix }}-namespace
+spec:
+  serviceName: "{{ $namePreffix }}-{{ $statefulsetName }}-statefulset"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $statefulsetName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $statefulsetName }}
+    spec:
+      containers:
+        - name: {{ $namePreffix }}-{{ $statefulsetName }}-container
+          image: {{ $statefulset.image }}
+          envFrom:
+            - secretRef:
+                name: {{ $namePreffix }}-{{ $statefulsetName }}-secret
+          ports:
+            - containerPort: {{ $statefulset.port }}
+          readinessProbe:
+            exec:
+              command: ['sh', '-c', {{ $statefulset.probe | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ['sh', '-c', {{ $statefulset.probe | quote }}]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          volumeMounts:
+            - name: {{ $namePreffix }}-{{ $statefulsetName }}-longhorn-volume
+              mountPath: {{ $statefulset.volume.mountPath }}
+              subPath: {{ $statefulset.volume.subPath }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ $namePreffix }}-{{ $statefulsetName }}-longhorn-volume
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: {{ $statefulset.volume.storageSize }}
+{{- end }}

@@ -1,0 +1,51 @@
+loki_docker_image_version: latest
+loki_docker_memory: 1G
+loki_docker_labels: {}
+loki_docker_network: bridge
+loki_docker_publish_ports:
+  - 3100:3100
+project_name: test
+docker_network_name: net_{{ project_name }}  
+
+loki_data_path: /var/lib/loki
+loki_etc_path: /etc/loki
+
+
+loki:
+    auth_enabled: false
+
+# https://grafana.com/docs/loki/latest/configuration/
+loki_config: {}
+  # https://github.com/grafana/loki/blob/main/cmd/loki/loki-docker-config.yaml
+
+  # auth_enabled: false
+
+  # common:
+  #   path_prefix: /loki
+  #   storage:
+  #     filesystem:
+  #       chunks_directory: /loki/chunks
+  #       rules_directory: /loki/rules
+  #   replication_factor: 1
+  #   ring:
+  #     kvstore:
+  #       store: inmemory
+
+  # schema_config:
+  #   configs:
+  #     - from: 2020-10-24
+  #       store: boltdb-shipper
+  #       object_store: filesystem
+  #       schema: v11
+  #       index:
+  #         prefix: index_
+  #         period: 24h
+
+  # ruler:
+  #   alertmanager_url: http://localhost:9093
+
+  # analytics:
+  #   reporting_enabled: false
+
+# https://grafana.com/docs/loki/latest/configuration/#use-environment-variables-in-the-configuration
+loki_env_vars: {}

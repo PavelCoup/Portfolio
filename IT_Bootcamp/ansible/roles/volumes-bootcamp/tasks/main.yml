@@ -1,0 +1,6 @@
+---
+- name: Create Docker volumes
+  docker_volume:
+    name: "{{ item }}"
+    state: present
+  with_items: "{{ volumes }}"

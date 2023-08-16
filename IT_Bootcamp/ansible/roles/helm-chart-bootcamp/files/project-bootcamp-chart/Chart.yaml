@@ -1,0 +1,5 @@
+apiVersion: v2
+name: bootcamp
+description: A Helm Chart for bootcamp
+version: 0.1.0
+appVersion: 1.0.0

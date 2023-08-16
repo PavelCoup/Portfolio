@@ -1,0 +1,13 @@
+---
+- name: geerlingguy.containerd
+  src: https://github.com/geerlingguy/ansible-role-containerd.git
+  scm: git
+  version: master
+- name: geerlingguy.kubernetes
+  src: https://github.com/geerlingguy/ansible-role-kubernetes.git
+  scm: git
+  version: master
+- name: geerlingguy.helm
+  src: https://github.com/geerlingguy/ansible-role-helm.git
+  scm: git
+  version: master

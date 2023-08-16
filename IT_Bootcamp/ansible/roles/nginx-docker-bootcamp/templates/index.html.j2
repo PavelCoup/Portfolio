@@ -1,0 +1,37 @@
+#jinja2: trim_blocks: "true", lstrip_blocks: "false"
+<!DOCTYPE html>
+<html>
+<head>
+  <title>A welcome page</title>
+  <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <a class="bootcamp-link" href="#">BOOTCAMP</a>
+  </div>
+
+  <!-- Hidden popup -->
+  <div class="popup-container" id="popup">
+    <button class="close-button" onclick="closePopup()">X</button>
+    <!-- Links -->
+    {% for item in nginx_environments %}
+    <pre><a href="http://{{item.environment}}.{{ project_name }}.{{ dnsprefix }}">http://{{item.environment}}.{{ project_name }}.{{ dnsprefix }}</a></pre>
+    {% endfor %}
+
+    <!-- Instructions -->
+    <h2>Do not forget to add posts to the hosts file:</h2>
+    {% for item in nginx_environments %}
+    <pre>{{ ansible_host }} {{item.environment}}.{{ project_name }}.{{ dnsprefix }}</pre>
+    {% endfor %}
+      
+    <h2>How to add posts to the hosts file:</h2>
+    <h3>Linux:</h3>
+    <pre>sudo nano /etc/hosts</pre>
+    
+    <h3>Windows:</h3>
+    <pre>notepad c:\Windows\System32\drivers\etc\hosts</pre>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

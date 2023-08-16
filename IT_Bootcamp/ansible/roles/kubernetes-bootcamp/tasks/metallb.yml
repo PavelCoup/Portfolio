@@ -1,0 +1,34 @@
+---
+- name: Check if metallb namespace already exists
+  shell: kubectl get namespace | grep -c metallb || true
+  register: metallb_namespace_check
+
+- name: Copying a crd metallb-crd-IPAddressPool file using a jinja2 template
+  template:
+    src: metallb-crd-IPAddressPool.yaml.j2
+    dest: "/home/{{ ansible_user }}/kube/metallb-crd-IPAddressPool.yaml"
+    mode: 0755
+
+- name: Copying a crd metallb-crd-L2Advertisement file using a jinja2 template
+  template:
+    src: metallb-crd-L2Advertisement.yaml.j2
+    dest: "/home/{{ ansible_user }}/kube/metallb-crd-L2Advertisement.yaml"
+    mode: 0755
+  when: metallb_namespace_check.stdout == 0
+
+- name: apply metallb-native
+  shell: >-
+    kubectl apply -f
+    https://raw.githubusercontent.com/metallb/metallb/{{ metallb_version }}/config/manifests/metallb-native.yaml
+  when: metallb_namespace_check.stdout == 0
+
+- name: Wait for pods to be ready
+  shell: kubectl wait pod -n metallb-system --for=condition=Ready --timeout=300s --selector='app=metallb'
+  when: metallb_namespace_check.stdout == 0
+
+- name: apply metallb-crd-IPAddressPool
+  shell: kubectl apply -f /home/{{ ansible_user }}/kube/metallb-crd-IPAddressPool.yaml
+
+- name: apply metallb-crd-L2Advertisement
+  shell: kubectl apply -f /home/{{ ansible_user }}/kube/metallb-crd-L2Advertisement.yaml
+  when: metallb_namespace_check.stdout == 0

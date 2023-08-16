@@ -1,0 +1,5 @@
+#!/bin/bash
+
+if [ $(/bin/df -h | /bin/grep ubuntu | /usr/bin/awk '{print $5}' | /usr/bin/sed 's/%$//') -gt {{ docker_volume_cleanup_percent }} ]; then 
+    /usr/bin/docker volume ls -qf dangling=true | /usr/bin/xargs --no-run-if-empty /usr/bin/docker volume rm -f; 
+fi

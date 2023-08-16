@@ -1,0 +1,5 @@
+volumes:
+  - volume_db_qa_test
+  - volume_db_dev_test
+  - volume_id_dev_test
+  - volume_id_qa_test

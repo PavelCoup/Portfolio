@@ -1,0 +1,27 @@
+#jinja2: trim_blocks: "true", lstrip_blocks: "false"
+groups:
+- name: AllInstances
+  rules:
+  {% for project in prometheus_project_lists %}
+  {% for item in project.containers %}
+  - alert: {{ project.project }}.{{ item }}
+    expr: absent(container_spec_memory_limit_bytes{job="{{ project.project }}", name="{{ item }}"})
+    for: {{ project.container_down_duration }}
+    labels:
+      severity: warning
+    annotations:
+      summary: "Instance is down"
+      description: "You should do something {% raw %}{{ $labels.instance }}{% endraw %}" 
+  {% endfor %} 
+  {% endfor %}
+
+  {% for project in prometheus_project_lists %}
+  - alert: LowDiskSpace.{{ project.project }}
+    expr: node_filesystem_free_bytes{fstype="ext4", job="testProject3", device=~".*ubuntu.*"} < 3e+9
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Low disk space on host {{ project.project }}"
+      description: "The free disk space on host {{ project.project }} has dropped below 3G"  
+  {% endfor %}  

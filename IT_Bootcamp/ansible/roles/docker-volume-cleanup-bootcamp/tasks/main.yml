@@ -1,0 +1,16 @@
+---
+- name: Creating a folder
+  file:
+    path: /home/{{ansible_user}}/cron/
+    state: directory
+
+- name: Copying a crontab file using a jinja2 template
+  template:
+    src: docker-volume-cleanup.j2
+    dest: "/etc/cron.d/docker_volume_cleanup"
+
+- name: Copying a crontab file using a jinja2 template
+  template:
+    src: docker-volume-cleanup.sh.j2
+    dest: "/home/{{ansible_user}}/cron/docker_volume_cleanup.sh"
+    mode: u=rwx,g=r,o=r

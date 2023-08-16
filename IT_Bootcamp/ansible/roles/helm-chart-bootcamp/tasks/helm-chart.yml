@@ -1,0 +1,58 @@
+---
+- name: Create Folder if not exist
+  file:
+    path: /kube
+    mode: 0755
+    state: directory
+
+- name: Create chart files
+  copy:
+    src: project-bootcamp-chart
+    dest: /kube/
+    mode: 0755
+
+- name: Create testProject2 values file
+  template:
+    src: values-testProject2.yaml.j2
+    dest: /kube/project-bootcamp-chart/values-testProject2.yaml
+
+- name: Create testProject1 values file
+  template:
+    src: values-testProject1.yaml.j2
+    dest: /kube/project-bootcamp-chart/values-testProject1.yaml
+
+- name: Create testProject3 values file
+  template:
+    src: values-testProject3.yaml.j2
+    dest: /kube/project-bootcamp-chart/values-testProject3.yaml
+
+- name: Check if testProject1-preprod release exists
+  shell: helm list | grep -c testProject1-preprod || true
+  register: helm_check
+
+- name: Upgrade or Install testProject1-preprod release
+  shell: >
+    helm {{ 'install' if helm_check.stdout == "0" else 'upgrade' }}
+    testProject1-preprod /kube/project-bootcamp-chart
+    -f /kube/project-bootcamp-chart/values-testProject2.yaml
+
+- name: Check if testProject2-preprod release exists
+  shell: helm list | grep -c testProject2-preprod || true
+  register: helm_check
+
+- name: Upgrade or Install testProject2-preprod release
+  shell: >
+    helm {{ 'install' if helm_check.stdout == "0" else 'upgrade' }}
+    testProject2-preprod /kube/project-bootcamp-chart
+    -f /kube/project-bootcamp-chart/values-testProject1.yaml
+
+- name: Check if testProject3-preprod release exists
+  shell: helm list | grep -c testProject3-preprod || true
+  register: helm_check
+
+- name: Upgrade or Install testProject3-preprod release
+  shell: >
+    helm {{ 'install' if helm_check.stdout == "0" else 'upgrade' }}
+    testProject3-preprod /kube/project-bootcamp-chart
+    -f /kube/project-bootcamp-chart/values-testProject3.yaml
+    

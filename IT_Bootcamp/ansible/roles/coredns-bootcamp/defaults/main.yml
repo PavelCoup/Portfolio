@@ -1,0 +1,4 @@
+dnsprefix: example.lan
+dns_list:
+  - "192.168.100.100 dev.{{dnsprefix}}"
+  - "192.168.100.101 qa.{{dnsprefix}}"

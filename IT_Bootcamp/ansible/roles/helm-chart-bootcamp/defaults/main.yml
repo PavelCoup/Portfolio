@@ -1,0 +1,33 @@
+---
+        registryUrl: someurl.com
+        registryToken: test
+        env_basic_auth:
+          username: test
+          password: test
+        MSSQL_DATABASE_HOST: 192.168.1.16
+        MSSQL_DATABASE_NAME: test
+        MSSQL_DATABASE_USERNAME: test
+        MSSQL_DATABASE_PASSWORD: test
+        MSSQL_DATABASE_PORT: 1433
+        testProject1_SECRET_KEY: 'test'
+        testProject1_DJANGO_SUPERUSER_USERNAME: "test"  
+        testProject1_DJANGO_SUPERUSER_PASSWORD: "test"
+        testProject1_PGADMIN_DEFAULT_EMAIL: test@test.com
+        testProject1_PGADMIN_DEFAULT_PASSWORD: test
+        testProject1_POSTGRES_DB: test
+        testProject1_POSTGRES_USER: test
+        testProject1_POSTGRES_PASSWORD: test
+        testProject2_SECRET_KEY: test
+        testProject2_DJANGO_SUPERUSER_USERNAME: test
+        testProject2_DJANGO_SUPERUSER_PASSWORD: test
+        testProject2_DJANGO_SUPERUSER_EMAIL: test@test.com
+        testProject2_PGADMIN_DEFAULT_EMAIL: test@test.com
+        testProject2_PGADMIN_DEFAULT_PASSWORD: test
+        testProject2_POSTGRES_DB: test
+        testProject2_POSTGRES_USER: test
+        testProject2_POSTGRES_PASSWORD: test
+        testProject3_MYSQL_DATABASE: test
+        testProject3_MYSQL_ROOT_PASSWORD: test
+        testProject3_MYSQL_USER: test
+        testProject3_MYSQL_PASSWORD: test
+        testProject3_JWT_SECRET_PHRASE: test

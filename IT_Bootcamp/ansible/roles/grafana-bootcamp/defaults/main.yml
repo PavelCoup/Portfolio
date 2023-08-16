@@ -1,0 +1,94 @@
+---
+grafana_version: "9.2.5"
+grafana_admin_user: admin
+grafana_admin_password: test1Dmb
+project_name: test
+docker_network_name: net_{{ project_name }} 
+prometheus_url: "http://prometheus:9090"
+grafana_url: "http://localhost:3000"
+
+grafana_users:
+  - name: testProject3
+    email: testProject3@user.com
+    login: testProject3
+    password: test
+    state: present
+  - name: testProject1
+    email: testProject1@user.com
+    login: test1
+    password: test1
+    state: present 
+  - name: testProject2
+    email: testProject2@user.com
+    login: testProject2
+    password: test2
+    state: present   
+
+grafana_team:
+  - name: testProject3_team
+    email: testProject3@team.com
+    members: testProject3@user.com
+    folder: testProject3_folder
+    state: present
+  - name: testProject1_team
+    email: testProject1@team.com
+    members: testProject1@user.com
+    folder: testProject1_folder
+    state: present 
+  - name: testProject2_team
+    email: testProject2@team.com
+    members: testProject2@user.com
+    folder: testProject2_folder
+    state: present   
+
+grafana_folder:
+  - title: "testProject3_folder"
+    state: present      
+  - title: "testProject1_folder"
+    state: present 
+  - title: "testProject2_folder"
+    state: present      
+
+grafana_datasource:
+  - name: "Loki"
+    uid: "SX_U33UVz1"
+    ds_type: "loki"
+    ds_url: http://loki:3100
+  - name: "Prometheus"
+    uid: "SX_U33UVz2"
+    ds_type: "prometheus"
+    ds_url: http://prometheus:9090  
+
+grafana_dashboard:
+  - folder: "testProject3_folder"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cont-logs-testProject3-backend.json"
+  - folder: "testProject3_folder"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cont-logs-testProject3-frontend.json"
+  - folder: "testProject1_folder"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cont-logs-testProject1-backend.json"
+  - folder: "testProject1_folder"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cont-logs-testProject1-frontend.json" 
+  - folder: "testProject2_folder"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cont-logs-testProject2-backend.json"
+  - folder: "testProject2_folder"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cont-logs-testProject2-frontend.json"      
+  - folder: "General"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/node-exporter.json" 
+  - folder: "General"
+    state: present
+    overwrite: yes
+    path: "/home/{{ ansible_user }}/grafana/cadvisor.json"    

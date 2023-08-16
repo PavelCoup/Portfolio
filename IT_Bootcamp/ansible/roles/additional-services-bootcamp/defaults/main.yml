@@ -1,0 +1,28 @@
+---
+project_name: test
+docker_network_name: "net_{{project_name}}"
+volumes:
+  - volume_db_qa_{{project_name}}
+  - volume_db_dev_{{project_name}}
+  - volume_id_dev_{{project_name}}
+  - volume_id_qa_{{project_name}}
+additional_services_containers:
+  - container_name: "db-qa-{{project_name}}"
+    base_image: "mysql:latest"
+    volumes: 
+      - "volume_db_qa_{{project_name}}:/var/lib/mysql"
+    env:
+      MYSQL_DATABASE: qa
+      MYSQL_ROOT_PASSWORD: "test"
+      MYSQL_USER: "test"
+      MYSQL_PASSWORD: "test"
+  - container_name: "db-dev-{{project_name}}"
+    base_image: "postgres:latest"
+    volumes: 
+      - "volume_db_dev_{{project_name}}:/var/lib/postgresql/data"
+    env:
+      POSTGRES_DB: dev
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+

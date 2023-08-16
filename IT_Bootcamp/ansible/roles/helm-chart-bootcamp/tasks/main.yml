@@ -1,0 +1,4 @@
+---
+- include_tasks: helm-chart.yml 
+  when: main_server == ansible_host
+

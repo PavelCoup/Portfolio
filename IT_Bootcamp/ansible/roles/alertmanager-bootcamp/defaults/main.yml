@@ -1,0 +1,5 @@
+alertmanager_version: v0.24.0
+telegram_bot_token: "<your_telegram_bot_token>"
+telegram_chat_id: "<your_telegram_chat_id>"
+project_name: test
+docker_network_name: net_{{ project_name }}

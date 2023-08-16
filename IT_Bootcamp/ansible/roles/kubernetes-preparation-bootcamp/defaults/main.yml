@@ -1,0 +1,5 @@
+---
+hostname: control1.bootcamp.lan
+kubernates_hosts:
+  - "192.168.1.5 control1.bootcamp.lan"
+  - "192.168.1.6 node1.bootcamp.lan"

@@ -1,0 +1,50 @@
+---
+project_name: test
+docker_network_name: net_{{ project_name }}
+# sonarqube_image: mc1arke/sonarqube-with-community-branch-plugin
+sonarqube_image: sonarqube:latest
+sonarqube_admin_password: sonar
+sonarqube_url: "localhost"
+sonarqube_port: "9000"
+postgres_image: postgres:13
+sonarqube_postgres_user: sonar
+sonarqube_postgres_password: sonar
+sonarqube_postgres_db: sonar
+sonarqube_postgres_port: "5433"
+sonarqube_permission_template:
+  - name: testProject3-back
+    projectKeyPattern: ".*testProject3-back.*"
+sonarqube_projects:
+  - name: testProject3-back
+    templateName: testProject3-back
+    visibility: private
+    branch: develop
+sonarqube_users:
+  - name: testProject3-back
+    password: sonar
+    templateName: testProject3-back
+    permission: admin
+sonarqube_containers:
+  - container_name: postgresql-sonarqube
+    base_image: "{{ postgres_image }}"
+    ports: "{{ sonarqube_postgres_port }}:5432"
+    volumes:
+      - sonar_postgresql:/var/lib/postgresql
+      - sonar_postgresql_data:/var/lib/postgresql/data
+    env:
+      POSTGRES_USER: "{{ sonarqube_postgres_user }}"
+      POSTGRES_PASSWORD: "{{ sonarqube_postgres_password }}"
+      POSTGRES_DB: "{{ sonarqube_postgres_db }}"
+  - container_name: sonarqube
+    base_image: "{{ sonarqube_image }}"
+    env:
+      SONAR_JDBC_URL: jdbc:postgresql://postgresql-sonarqube:5432/{{ sonarqube_postgres_db }}
+      SONAR_JDBC_USERNAME: "{{ sonarqube_postgres_user }}"
+      SONAR_JDBC_PASSWORD: "{{ sonarqube_postgres_password }}"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    ports:
+      - "{{ sonarqube_port }}:9000"
+

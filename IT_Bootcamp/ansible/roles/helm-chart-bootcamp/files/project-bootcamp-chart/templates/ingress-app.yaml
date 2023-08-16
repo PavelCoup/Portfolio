@@ -1,0 +1,78 @@
+{{- $namePreffix := printf "%s-%s" .Values.project .Values.namespaceSuffix }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth
+  namespace: {{ $namePreffix }}-namespace
+type: kubernetes.io/basic-auth
+data:
+  {{- range $key, $value := .Values.env_basic_auth }}
+  {{ $key }}: {{ $value | toString | b64enc | quote }}
+  {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $namePreffix }}-ingress
+  namespace: {{ $namePreffix }}-namespace
+  annotations:
+    nginx.ingress.kubernetes.io/server-snippet: |
+      gzip on;
+      gzip_http_version 1.1;
+      gzip_comp_level 6;
+      gzip_vary on;
+      gzip_proxied any;
+      gzip_types
+          text/plain
+          application/javascript
+          text/css
+          application/json
+          application/x-javascript
+          text/xml
+          application/xml
+          application/xml+rss
+          text/javascript
+          application/vnd.ms-fontobject
+          application/x-font-ttf
+          font/opentype;
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http://{{ .Values.namespaceSuffix }}.{{ .Values.project }}.{{ .Values.dnsprefix }}"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With,Range"  # Разрешенные заголовки
+    nginx.ingress.kubernetes.io/cors-expose-headers: "Content-Length,Content-Range"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Content-Security-Policy "worker-src blob:; child-src blob: gap:; img-src 'self' blob: data:; default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: content:" always;
+spec:
+  rules:
+  - host: {{ .Values.namespaceSuffix }}.{{ .Values.project }}.{{ .Values.dnsprefix }}
+    http:
+      paths:
+      {{- range $deploimentName, $deploiment := .Values.deployments }}
+      {{- if default $deploiment.paths false }}
+        {{- range $deploiment.paths }}
+        - path: {{ .path }}
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $deploimentName }}
+              port:
+                number: {{ $deploiment.port }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+  {{- range $deploimentName, $deploiment := .Values.deployments }}
+  {{- if default $deploiment.subdomain false }}
+  - host: {{ $deploiment.subdomain }}.{{ $.Values.namespaceSuffix }}.{{ $.Values.project }}.{{ $.Values.dnsprefix }}
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $deploimentName }}
+              port:
+                number: {{ $deploiment.port }}
+  {{- end }}
+  {{- end }}

@@ -1,0 +1,15 @@
+{
+    "NameConnection":  "VPN_L2TP_IT_BOOTCAMP_2023",
+    "ServerAddress":  "xxx",
+    "DestinationPrefix":  "xxx",
+    "RemoteGateway":  "xxx",
+    "DnsServerIp":  "xxx",
+    "DnsSuffix":  "xxx",
+    "IPsecSecret":  "xxx",
+    "Username":  "xxx",
+    "Password":  "xxx",
+    "hosts":{
+        "dev.example.com":  "xxx.xxx.xxx.xxx",
+        "qa.example.com":  "xxx.xxx.xxx.xxx" 
+    }
+}

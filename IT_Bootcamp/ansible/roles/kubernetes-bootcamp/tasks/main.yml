@@ -1,0 +1,57 @@
+---
+# - name: Apply label using kubectl command
+#   shell: kubectl label node {{ item }} node-role.kubernetes.io/worker=""
+#   loop: "{{ worker_nodes }}"
+#   when: main_server == ansible_host
+
+- name: Installation of packets JQ, Open-ISCSI, NFS-COMMON
+  apt:
+    name:
+      - jq
+      - open-iscsi
+      - nfs-common
+    state: latest
+    update_cache: true
+
+- name: ISCSID inclusion and launch
+  systemd:
+    name: iscsid
+    enabled: yes
+    state: started
+
+- name: Remove nfs-common.service file
+  file:
+    path: /lib/systemd/system/nfs-common.service
+    state: absent
+
+- name: Start NFS client service
+  systemd:
+    name: nfs-common
+    enabled: yes
+    daemon_reload: yes
+    state: started
+
+- name: Add KUBECONFIG to /etc/environment
+  ansible.builtin.blockinfile:
+    path: "/etc/environment"
+    block: |
+      KUBECONFIG="/etc/kubernetes/admin.conf"
+    state: present
+  when: main_server == ansible_host
+
+- name: Create Folder if not exist
+  file:
+    path: /home/{{ ansible_user }}/kube
+    mode: 0755
+    state: directory
+  when: main_server == ansible_host
+
+- include_tasks: metallb.yml 
+  when: main_server == ansible_host
+
+- include_tasks: ingress-nginx.yml 
+  when: main_server == ansible_host
+
+- include_tasks: longhorn.yml 
+  when: main_server == ansible_host
+

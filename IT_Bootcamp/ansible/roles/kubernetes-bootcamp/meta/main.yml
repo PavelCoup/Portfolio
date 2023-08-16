@@ -1,0 +1,18 @@
+---
+dependencies:
+  - role: kubernetes-preparation-bootcamp
+  - role: geerlingguy.containerd
+    vars:
+        containerd_config_default_write: true
+        containerd_config_cgroup_driver_systemd: true
+  - role: geerlingguy.kubernetes
+    vars:
+      # kubernetes_apiserver_advertise_address: 192.168.1.5
+      ansible_distribution: 'Debian'
+      kubernetes_join_command_extra_opts: "--ignore-preflight-errors=all"
+      kubernetes_pod_network:
+        cni: 'calico'
+        cidr: '192.168.2.0/16'
+  - role: geerlingguy.helm
+    vars:
+      helm_version: 'v3.12.0'

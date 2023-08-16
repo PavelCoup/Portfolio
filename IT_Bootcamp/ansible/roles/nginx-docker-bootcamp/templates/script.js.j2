@@ -1,0 +1,19 @@
+const bootcampLink = document.querySelector(".bootcamp-link");
+const popup = document.getElementById("popup");
+
+function togglePopup() {
+  popup.classList.toggle("show");
+}
+
+function closePopup() {
+  popup.classList.remove("show");
+}
+
+bootcampLink.addEventListener("click", togglePopup);
+
+// Close the popup when clicking outside the popup container
+document.addEventListener("click", (event) => {
+  if (!popup.contains(event.target) && !event.target.classList.contains("bootcamp-link")) {
+    closePopup();
+  }
+});

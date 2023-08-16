@@ -1,0 +1,59 @@
+- name: Creating a folder
+  file:
+    path: /home/{{ansible_user}}/coredns/
+    state: directory
+
+- name: Copying a configuration file using a jinja2 template
+  template:
+    src: Corefile.j2
+    dest: "/home/{{ansible_user}}/coredns/Corefile"
+
+- name: Pull coredns image
+  docker_image:
+    source: pull
+    name: coredns/coredns
+    state: present
+
+- name: Install the DNS server on {{dnsserver}} and disconnect the listener DNS in Resolved.conf
+  lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  with_items:
+    - { regexp: '^#?DNSStubListener=yes', line: 'DNSStubListener=no' }
+    - { regexp: '^#?DNS=', line: 'DNS={{ dnsserver }} 8.8.8.8 1.1.1.1' }
+
+- name: Link resolve.conf to resolved
+  file:
+    src: /run/systemd/resolve/resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+
+- name: Configure netplan
+  command: netplan set ethernets.{{ ansible_default_ipv4.interface }}.nameservers.addresses=[{{ dnsserver }},8.8.8.8,1.1.1.1]
+
+- name: Apply netplan configuration
+  command: netplan apply
+
+- name: Restart systemd-resolved
+  service:
+    name: systemd-resolved
+    state: restarted
+
+- name: Restart docker
+  service:
+    name: docker
+    state: restarted
+
+- name: Run coredns container
+  docker_container:
+    name: coredns
+    image: coredns/coredns
+    restart_policy: always
+    volumes:
+      - /home/{{ansible_user}}/coredns/:/root/
+    ports:
+      - '53:53'
+      - "{{dnsserver}}:53:53/udp"
+    command: -conf /root/Corefile

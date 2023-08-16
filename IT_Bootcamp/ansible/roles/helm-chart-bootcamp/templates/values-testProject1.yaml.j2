@@ -1,0 +1,77 @@
+namespaceSuffix: preprod
+project: testProject1
+dnsprefix: bootcamp.lan
+dockerConfig: {% raw %}'{"auths": { "{% endraw %}{{ registryUrl }}{% raw %}": { "auth": "{% endraw %}{{ registryToken }}{% raw %}"}}}'{% endraw %}
+
+env_basic_auth:
+  username: "{{ env_basic_auth.username }}"
+  password: "{{ env_basic_auth.password }}"
+
+deployments:
+  frontend:
+    replicas: 2
+    image: "{{ registryUrl }}/itbc-devops-test/testProject3-front-nginx"  
+    version: latest
+    paths:
+      - path: "/"
+    port: 80
+    probePath: "/"
+    env:  
+      API_URL: http://preprod.testProject3.bootcamp.lan
+  backend:
+    replicas: 2
+    image: "{{ registryUrl }}/itbc-devops-test/testProject3-backend"
+    version: latest
+    paths:
+      - path: "/api"
+      - path: "/actuator/health"
+    port: 8080
+    probePath: "/actuator/health"
+    volume:
+      storageSize: 500Mi
+      mountPath: /opt/testProject3/photo
+      subPath: backend_volume
+    initContainer:
+      image: mysql:latest
+      probe: >-
+        until mysql -h database -u $MYSQL_USER -p$MYSQL_PASSWORD -e 'SHOW DATABASES;' | grep $MYSQL_DATABASE; 
+        do echo "Waiting for MySQL..."; sleep 2; done;
+    env:
+      CORS_ALLOWED_ORIGINS: "*"
+      CORS_ALLOWED_METHODS: "*"
+      DATABASE_URL: "jdbc:mysql://database:3306/{{ testProject3_MYSQL_DATABASE }}"
+      DATABASE_USERNAME: "{{ testProject3_MYSQL_USER }}"
+      DATABASE_PASSWORD: "{{ testProject3_MYSQL_PASSWORD }}"
+      SPRING_PROFILES_ACTIVE: preprod
+      JWT_SECRET_PHRASE: "{{ testProject3_JWT_SECRET_PHRASE }}"
+      IMAGES_STORAGE_FOLDER: '/opt/testProject3/photo'
+  dbmanagement:
+    replicas: 1
+    probePath: "/"
+    subdomain: phpmyadmin
+    image: phpmyadmin
+    version: latest
+    port: 80
+    volume:
+      storageSize: 100Mi
+      mountPath: /test
+      subPath: phpmyadmin
+    env:  
+      PMA_ARBITRARY: 1
+
+statefulsets:
+  database:
+    replicas: 1
+    image: mysql:8.0.34
+    port: 3306
+    volume:
+      storageSize: 500Mi
+      mountPath: /var/lib/mysql
+      subPath: mysql
+    env:  
+      MYSQL_DATABASE: "{{ testProject3_MYSQL_DATABASE }}"
+      MYSQL_ROOT_PASSWORD: "{{ testProject3_MYSQL_ROOT_PASSWORD }}"
+      MYSQL_USER: "{{ testProject3_MYSQL_USER }}"
+      MYSQL_PASSWORD: "{{ testProject3_MYSQL_PASSWORD }}"
+    probe: 'mysql -u $MYSQL_USER -p$MYSQL_PASSWORD -e "SHOW DATABASES;" | grep $MYSQL_DATABASE'
+
